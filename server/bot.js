@@ -7,7 +7,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
 
 // ⚠️ REPLACE WITH YOUR NEW TOKEN (after revoking the old one)
-const BOT_TOKEN = 'YOUR_NEW_BOT_TOKEN';
+const BOT_TOKEN = '8312462723:AAHVyOGm7vDKJD7M_8ZceQzgvwLkMGc6dEU';
 const GAME_URL = 'https://myf-delivery.github.io/M-Bingo/';
 const SERVER_URL = 'https://m-bingo-server.onrender.com';
 
