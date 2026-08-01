@@ -11,23 +11,34 @@ const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
 // ============================================================
-//  GAME STATE
+//  GAME STATE (Shared across ALL players)
 // ============================================================
 
-let players = [];
-let winners = [];
 let gameState = {
-    isPlaying: false,
+    // Game flow
+    status: 'waiting', // 'waiting' | 'selecting' | 'playing' | 'ended'
+    
+    // Players
+    players: [], // { id, name, telegramId, balance, cards: [], isReady }
+    
+    // Card selection
+    selectionTimeLeft: 60,
+    selectionTimer: null,
+    selectedCards: [], // Array of card numbers already taken
+    
+    // Game play
     stake: 0,
     gameNumber: 0,
     calledNumbers: [],
-    totalCardsInPlay: 0
+    totalCardsInPlay: 0,
+    gameCards: [], // All cards in current game with markings
+    
+    // Winners
+    winners: [],
+    isGameActive: false,
 };
 
-// ============================================================
-//  BINGO BOARD GENERATION
-// ============================================================
-
+// Generate BINGO boards (200 cards)
 function generateBoards() {
     const boards = [];
     for (let b = 1; b <= 200; b++) {
@@ -37,7 +48,7 @@ function generateBoards() {
             for (let col = 0; col < 5; col++) {
                 let num;
                 if (col === 2 && row === 2) { 
-                    num = '★'; 
+                    num = 'â˜…'; 
                 } else {
                     const min = col * 15 + 1;
                     const max = (col + 1) * 15;
@@ -68,10 +79,33 @@ function broadcast(message) {
 }
 
 function sendToPlayer(playerId, message) {
-    const player = players.find(p => p.id === playerId);
-    if (player && player.ws.readyState === WebSocket.OPEN) {
+    const player = gameState.players.find(p => p.id === playerId);
+    if (player && player.ws && player.ws.readyState === WebSocket.OPEN) {
         player.ws.send(JSON.stringify(message));
     }
+}
+
+function broadcastGameState() {
+    // Send full game state to all players
+    broadcast({
+        type: 'gameStateUpdate',
+        data: {
+            status: gameState.status,
+            players: gameState.players.map(p => ({ 
+                id: p.id, 
+                name: p.name, 
+                cards: p.cards || [],
+                isReady: p.isReady || false,
+                balance: p.balance
+            })),
+            selectionTimeLeft: gameState.selectionTimeLeft,
+            selectedCards: gameState.selectedCards,
+            stake: gameState.stake,
+            gameNumber: gameState.gameNumber,
+            calledNumbers: gameState.calledNumbers,
+            totalCardsInPlay: gameState.totalCardsInPlay
+        }
+    });
 }
 
 // ============================================================
@@ -82,52 +116,183 @@ function checkBingoPatterns(marked) {
     const patterns = [];
     const size = 5;
     
+    // Rows
     for (let r = 0; r < size; r++) {
         let win = true;
         for (let c = 0; c < size; c++) { 
             if (!marked[r][c]) { win = false; break; } 
         }
-        if (win) patterns.push({ type: 'row', index: r, label: `ረድፍ ${r+1}` });
+        if (win) patterns.push({ type: 'row', index: r, label: `Row ${r+1}` });
     }
     
+    // Columns
     for (let c = 0; c < size; c++) {
         let win = true;
         for (let r = 0; r < size; r++) { 
             if (!marked[r][c]) { win = false; break; } 
         }
-        if (win) patterns.push({ type: 'column', index: c, label: `ዓምድ ${c+1}` });
+        if (win) patterns.push({ type: 'column', index: c, label: `Column ${c+1}` });
     }
     
+    // Diagonals
     let win = true;
     for (let i = 0; i < size; i++) { 
         if (!marked[i][i]) { win = false; break; } 
     }
-    if (win) patterns.push({ type: 'diagonal', index: 0, label: 'ሰያፍ 1' });
+    if (win) patterns.push({ type: 'diagonal', index: 0, label: 'Diagonal 1' });
     
     win = true;
     for (let i = 0; i < size; i++) { 
         if (!marked[i][size - 1 - i]) { win = false; break; } 
     }
-    if (win) patterns.push({ type: 'diagonal', index: 1, label: 'ሰያፍ 2' });
+    if (win) patterns.push({ type: 'diagonal', index: 1, label: 'Diagonal 2' });
     
     return patterns;
+}
+
+// ============================================================
+//  CARD SELECTION PHASE
+// ============================================================
+
+function startSelectionPhase(stake) {
+    gameState.status = 'selecting';
+    gameState.stake = stake;
+    gameState.selectionTimeLeft = 60;
+    gameState.selectedCards = [];
+    gameState.gameNumber++;
+    
+    // Reset all players' card selections
+    gameState.players.forEach(p => {
+        p.cards = [];
+        p.isReady = false;
+    });
+    
+    broadcastGameState();
+    
+    // Start countdown timer
+    if (gameState.selectionTimer) {
+        clearInterval(gameState.selectionTimer);
+    }
+    
+    gameState.selectionTimer = setInterval(() => {
+        gameState.selectionTimeLeft--;
+        
+        broadcast({
+            type: 'selectionTimer',
+            data: { timeLeft: gameState.selectionTimeLeft }
+        });
+        
+        if (gameState.selectionTimeLeft <= 0) {
+            clearInterval(gameState.selectionTimer);
+            // Auto-start game with players who have cards
+            startGame();
+        }
+    }, 1000);
+}
+
+// ============================================================
+//  CARD SELECTION LOGIC
+// ============================================================
+
+function selectCard(playerId, cardNumber) {
+    const player = gameState.players.find(p => p.id === playerId);
+    if (!player) return { success: false, message: 'Player not found' };
+    
+    // Check if game is in selection phase
+    if (gameState.status !== 'selecting') {
+        return { success: false, message: 'Card selection is not active' };
+    }
+    
+    // Check if card is already taken
+    if (gameState.selectedCards.includes(cardNumber)) {
+        return { success: false, message: 'Card already taken by another player' };
+    }
+    
+    // Check if player already has max cards (5)
+    if (player.cards.length >= 5) {
+        return { success: false, message: 'You already have 5 cards' };
+    }
+    
+    // Check if player has enough balance
+    const cost = gameState.stake * (player.cards.length + 1);
+    if (cost > player.balance) {
+        return { success: false, message: 'Insufficient balance' };
+    }
+    
+    // Add card to player
+    player.cards.push(cardNumber);
+    gameState.selectedCards.push(cardNumber);
+    
+    // Deduct balance
+    player.balance -= gameState.stake;
+    
+    // Mark player as ready
+    player.isReady = true;
+    
+    broadcastGameState();
+    
+    return { success: true, message: 'Card selected successfully' };
+}
+
+function unselectCard(playerId, cardNumber) {
+    const player = gameState.players.find(p => p.id === playerId);
+    if (!player) return { success: false, message: 'Player not found' };
+    
+    if (gameState.status !== 'selecting') {
+        return { success: false, message: 'Card selection is not active' };
+    }
+    
+    const index = player.cards.indexOf(cardNumber);
+    if (index === -1) {
+        return { success: false, message: 'Card not selected by you' };
+    }
+    
+    player.cards.splice(index, 1);
+    const selectedIndex = gameState.selectedCards.indexOf(cardNumber);
+    if (selectedIndex > -1) {
+        gameState.selectedCards.splice(selectedIndex, 1);
+    }
+    
+    // Refund balance
+    player.balance += gameState.stake;
+    
+    if (player.cards.length === 0) {
+        player.isReady = false;
+    }
+    
+    broadcastGameState();
+    
+    return { success: true, message: 'Card unselected' };
 }
 
 // ============================================================
 //  GAME ENGINE
 // ============================================================
 
-function startGame(stake, playerCards) {
-    gameState.isPlaying = true;
-    gameState.stake = stake;
-    gameState.gameNumber++;
-    gameState.calledNumbers = [];
-    gameState.totalCardsInPlay = playerCards.reduce((sum, p) => sum + p.cards.length, 0);
+function startGame() {
+    // Check if enough players have cards
+    const readyPlayers = gameState.players.filter(p => p.cards && p.cards.length > 0);
     
-    const allCards = [];
-    playerCards.forEach(player => {
+    if (readyPlayers.length < 2) {
+        broadcast({
+            type: 'gameError',
+            data: { message: 'Need at least 2 players with cards to start' }
+        });
+        gameState.status = 'waiting';
+        broadcastGameState();
+        return;
+    }
+    
+    gameState.status = 'playing';
+    gameState.isGameActive = true;
+    gameState.calledNumbers = [];
+    gameState.totalCardsInPlay = readyPlayers.reduce((sum, p) => sum + p.cards.length, 0);
+    
+    // Build all cards for the game
+    gameState.gameCards = [];
+    readyPlayers.forEach(player => {
         player.cards.forEach(cardNum => {
-            allCards.push({
+            gameState.gameCards.push({
                 playerId: player.id,
                 playerName: player.name,
                 cardNumber: cardNum,
@@ -139,19 +304,21 @@ function startGame(stake, playerCards) {
         });
     });
     
-    allCards.forEach(c => c.marked[2][2] = true);
+    // Mark free spaces
+    gameState.gameCards.forEach(c => c.marked[2][2] = true);
     
     broadcast({
         type: 'gameStart',
         data: {
             gameNumber: gameState.gameNumber,
-            stake: stake,
+            stake: gameState.stake,
             totalCards: gameState.totalCardsInPlay,
-            cards: allCards,
-            players: playerCards.map(p => ({ id: p.id, name: p.name, cards: p.cards }))
+            cards: gameState.gameCards,
+            players: readyPlayers.map(p => ({ id: p.id, name: p.name, cards: p.cards }))
         }
     });
     
+    // Start calling numbers
     let callIndex = 0;
     const allNumbers = [];
     for (let i = 1; i <= 75; i++) allNumbers.push(i);
@@ -161,14 +328,14 @@ function startGame(stake, playerCards) {
     }
     
     const interval = setInterval(() => {
-        if (!gameState.isPlaying) {
+        if (!gameState.isGameActive) {
             clearInterval(interval);
             return;
         }
         
         if (callIndex >= allNumbers.length) {
             clearInterval(interval);
-            endGame();
+            endGame('No winner - all numbers called');
             return;
         }
         
@@ -176,7 +343,8 @@ function startGame(stake, playerCards) {
         callIndex++;
         gameState.calledNumbers.push(number);
         
-        allCards.forEach(card => {
+        // Update all cards
+        gameState.gameCards.forEach(card => {
             for (let r = 0; r < 5; r++) {
                 for (let c = 0; c < 5; c++) {
                     if (card.board[r][c] === number) {
@@ -186,8 +354,9 @@ function startGame(stake, playerCards) {
             }
         });
         
+        // Check for winners
         let gameWinners = [];
-        allCards.forEach(card => {
+        gameState.gameCards.forEach(card => {
             if (card.bingo) return;
             const patterns = checkBingoPatterns(card.marked);
             if (patterns.length > 0) {
@@ -207,17 +376,17 @@ function startGame(stake, playerCards) {
         
         if (gameWinners.length > 0) {
             clearInterval(interval);
-            const totalPrize = stake * gameState.totalCardsInPlay * 0.7;
+            const totalPrize = gameState.stake * gameState.totalCardsInPlay * 0.7;
             const prizePerWinner = Math.round(totalPrize / gameWinners.length);
             
             gameWinners.forEach(w => {
                 w.prize = prizePerWinner;
-                const player = players.find(p => p.id === w.playerId);
+                const player = gameState.players.find(p => p.id === w.playerId);
                 if (player) {
                     player.balance += prizePerWinner;
                 }
-                // Store winners for API
-                winners.push({
+                // Store winners
+                gameState.winners.push({
                     name: w.playerName,
                     prize: prizePerWinner,
                     cardNumber: w.cardNumber,
@@ -235,8 +404,19 @@ function startGame(stake, playerCards) {
                 }
             });
             
-            gameState.isPlaying = false;
-            players.forEach(p => p.cards = []);
+            gameState.isGameActive = false;
+            gameState.status = 'ended';
+            
+            // Reset after delay
+            setTimeout(() => {
+                gameState.status = 'waiting';
+                gameState.players.forEach(p => {
+                    p.cards = [];
+                    p.isReady = false;
+                });
+                broadcastGameState();
+            }, 10000);
+            
             return;
         }
         
@@ -253,27 +433,36 @@ function startGame(stake, playerCards) {
     }, 1500);
 }
 
-function endGame() {
-    gameState.isPlaying = false;
+function endGame(message) {
+    gameState.isGameActive = false;
+    gameState.status = 'ended';
+    
     broadcast({
         type: 'gameEnd',
         data: {
             winners: [],
             prizePerWinner: 0,
             calledNumbers: gameState.calledNumbers,
-            message: 'Game ended without winner'
+            message: message || 'Game ended'
         }
     });
-    players.forEach(p => p.cards = []);
+    
+    setTimeout(() => {
+        gameState.status = 'waiting';
+        gameState.players.forEach(p => {
+            p.cards = [];
+            p.isReady = false;
+        });
+        broadcastGameState();
+    }, 5000);
 }
 
 // ============================================================
 //  TELEGRAM BOT API ENDPOINTS
 // ============================================================
 
-// Get player balance by Telegram ID
 app.get('/api/balance/:telegramId', (req, res) => {
-    const player = players.find(p => p.telegramId == req.params.telegramId);
+    const player = gameState.players.find(p => p.telegramId == req.params.telegramId);
     if (player) {
         res.json({ 
             balance: player.balance, 
@@ -285,25 +474,33 @@ app.get('/api/balance/:telegramId', (req, res) => {
     }
 });
 
-// Get all players (for admin)
 app.get('/api/players', (req, res) => {
-    res.json(players.map(p => ({ 
+    res.json(gameState.players.map(p => ({ 
         name: p.name, 
         balance: p.balance,
         cards: p.cards ? p.cards.length : 0,
-        telegramId: p.telegramId
+        telegramId: p.telegramId,
+        isReady: p.isReady || false
     })));
 });
 
-// Get recent winners
 app.get('/api/recent-winners', (req, res) => {
-    res.json(winners.slice(-10));
+    res.json(gameState.winners.slice(-10));
 });
 
-// Add balance via API (for Telegram bot)
+app.get('/api/game-state', (req, res) => {
+    res.json({
+        status: gameState.status,
+        players: gameState.players.length,
+        selectionTimeLeft: gameState.selectionTimeLeft,
+        selectedCards: gameState.selectedCards,
+        calledNumbers: gameState.calledNumbers
+    });
+});
+
 app.post('/api/add-balance', (req, res) => {
     const { telegramId, amount } = req.body;
-    const player = players.find(p => p.telegramId == telegramId);
+    const player = gameState.players.find(p => p.telegramId == telegramId);
     if (player) {
         player.balance += amount;
         res.json({ success: true, newBalance: player.balance });
@@ -312,10 +509,9 @@ app.post('/api/add-balance', (req, res) => {
     }
 });
 
-// Remove balance via API
 app.post('/api/remove-balance', (req, res) => {
     const { telegramId, amount } = req.body;
-    const player = players.find(p => p.telegramId == telegramId);
+    const player = gameState.players.find(p => p.telegramId == telegramId);
     if (player) {
         if (player.balance >= amount) {
             player.balance -= amount;
@@ -333,95 +529,119 @@ app.post('/api/remove-balance', (req, res) => {
 // ============================================================
 
 wss.on('connection', (ws) => {
-    console.log('New player connected');
+    console.log('New player connected via WebSocket');
     
     const playerId = Date.now() + Math.floor(Math.random() * 1000);
     
     const player = {
         id: playerId,
-        telegramId: null, // Will be set when user registers
-        name: `Player ${players.length + 1}`,
+        telegramId: null,
+        name: `Player ${gameState.players.length + 1}`,
         balance: 500,
         cards: [],
         ws: ws,
         isWinner: false,
         gamesPlayed: 0,
-        wins: 0
+        wins: 0,
+        isReady: false
     };
     
-    players.push(player);
+    gameState.players.push(player);
     
+    // Send current game state to new player
     ws.send(JSON.stringify({
         type: 'init',
         data: {
             playerId: playerId,
-            players: players.map(p => ({ id: p.id, name: p.name, balance: p.balance, cards: p.cards })),
+            players: gameState.players.map(p => ({ 
+                id: p.id, 
+                name: p.name, 
+                balance: p.balance, 
+                cards: p.cards,
+                isReady: p.isReady || false
+            })),
             gameState: {
-                isPlaying: gameState.isPlaying,
+                status: gameState.status,
                 gameNumber: gameState.gameNumber,
                 stake: gameState.stake,
-                calledNumbers: gameState.calledNumbers
+                calledNumbers: gameState.calledNumbers,
+                selectionTimeLeft: gameState.selectionTimeLeft,
+                selectedCards: gameState.selectedCards,
+                isPlaying: gameState.isGameActive
             }
         }
     }));
     
-    broadcast({
-        type: 'playersUpdate',
-        data: players.map(p => ({ id: p.id, name: p.name, balance: p.balance, cards: p.cards }))
-    });
+    broadcastGameState();
     
+    // Handle messages from client
     ws.on('message', (message) => {
         try {
             const data = JSON.parse(message);
             
             switch (data.type) {
                 case 'register':
-                    player.name = data.data.name;
+                    player.name = data.data.name || `Player ${gameState.players.length}`;
                     player.telegramId = data.data.telegramId || null;
-                    broadcast({
-                        type: 'playersUpdate',
-                        data: players.map(p => ({ id: p.id, name: p.name, balance: p.balance, cards: p.cards }))
-                    });
+                    
+                    // Check if this player already exists via telegramId
+                    if (player.telegramId) {
+                        const existing = gameState.players.find(p => 
+                            p.telegramId === player.telegramId && p.id !== player.id
+                        );
+                        if (existing) {
+                            // Merge data
+                            player.balance = existing.balance;
+                            player.cards = existing.cards;
+                            player.gamesPlayed = existing.gamesPlayed;
+                            player.wins = existing.wins;
+                            // Remove the old player
+                            gameState.players = gameState.players.filter(p => p.id !== existing.id);
+                        }
+                    }
+                    
+                    broadcastGameState();
                     break;
                     
-                case 'selectCards':
-                    player.cards = data.data.cards;
-                    const cost = gameState.stake * player.cards.length;
-                    if (cost > player.balance) {
-                        ws.send(JSON.stringify({
-                            type: 'error',
-                            data: { message: 'Insufficient balance' }
-                        }));
-                        player.cards = [];
-                        return;
-                    }
-                    player.balance -= cost;
+                case 'selectCard':
+                    const result = selectCard(player.id, data.data.cardNumber);
+                    ws.send(JSON.stringify({
+                        type: 'cardSelectionResult',
+                        data: result
+                    }));
+                    break;
                     
-                    broadcast({
-                        type: 'playersUpdate',
-                        data: players.map(p => ({ id: p.id, name: p.name, balance: p.balance, cards: p.cards }))
-                    });
+                case 'unselectCard':
+                    const unselectResult = unselectCard(player.id, data.data.cardNumber);
+                    ws.send(JSON.stringify({
+                        type: 'cardSelectionResult',
+                        data: unselectResult
+                    }));
+                    break;
+                    
+                case 'startSelection':
+                    if (gameState.status === 'waiting') {
+                        const stake = data.data.stake || 10;
+                        startSelectionPhase(stake);
+                    } else {
+                        ws.send(JSON.stringify({
+                            type: 'gameError',
+                            data: { message: 'Game already in progress' }
+                        }));
+                    }
                     break;
                     
                 case 'startGame':
-                    if (gameState.isPlaying) {
+                    if (gameState.status === 'selecting') {
+                        // Force start game
+                        clearInterval(gameState.selectionTimer);
+                        startGame();
+                    } else {
                         ws.send(JSON.stringify({
-                            type: 'error',
-                            data: { message: 'Game already in progress' }
+                            type: 'gameError',
+                            data: { message: 'Game not in selection phase' }
                         }));
-                        return;
                     }
-                    
-                    const playersWithCards = players.filter(p => p.cards.length > 0);
-                    if (playersWithCards.length < 2) {
-                        ws.send(JSON.stringify({
-                            type: 'error',
-                            data: { message: 'Need at least 2 players with cards to start' }
-                        }));
-                        return;
-                    }
-                    
-                    startGame(data.data.stake, playersWithCards);
                     break;
                     
                 case 'adminLogin':
@@ -439,17 +659,14 @@ wss.on('connection', (ws) => {
                     break;
                     
                 case 'adminAction':
-                    const targetPlayer = players.find(p => p.id === data.data.playerId);
+                    const targetPlayer = gameState.players.find(p => p.id === data.data.playerId);
                     if (targetPlayer) {
                         if (data.data.action === 'deposit') {
                             targetPlayer.balance += data.data.amount;
                         } else if (data.data.action === 'withdraw') {
                             targetPlayer.balance -= data.data.amount;
                         }
-                        broadcast({
-                            type: 'playersUpdate',
-                            data: players.map(p => ({ id: p.id, name: p.name, balance: p.balance, cards: p.cards }))
-                        });
+                        broadcastGameState();
                     }
                     break;
                     
@@ -457,13 +674,36 @@ wss.on('connection', (ws) => {
                     ws.send(JSON.stringify({
                         type: 'adminData',
                         data: {
-                            players: players.map(p => ({ 
+                            players: gameState.players.map(p => ({ 
                                 id: p.id, 
                                 name: p.name, 
                                 balance: p.balance, 
                                 cards: p.cards,
-                                telegramId: p.telegramId
+                                telegramId: p.telegramId,
+                                isReady: p.isReady || false
                             }))
+                        }
+                    }));
+                    break;
+                    
+                case 'getGameState':
+                    ws.send(JSON.stringify({
+                        type: 'gameStateUpdate',
+                        data: {
+                            status: gameState.status,
+                            players: gameState.players.map(p => ({ 
+                                id: p.id, 
+                                name: p.name, 
+                                cards: p.cards || [],
+                                isReady: p.isReady || false,
+                                balance: p.balance
+                            })),
+                            selectionTimeLeft: gameState.selectionTimeLeft,
+                            selectedCards: gameState.selectedCards,
+                            stake: gameState.stake,
+                            gameNumber: gameState.gameNumber,
+                            calledNumbers: gameState.calledNumbers,
+                            totalCardsInPlay: gameState.totalCardsInPlay
                         }
                     }));
                     break;
@@ -475,15 +715,14 @@ wss.on('connection', (ws) => {
     
     ws.on('close', () => {
         console.log('Player disconnected');
-        players = players.filter(p => p.id !== playerId);
-        broadcast({
-            type: 'playersUpdate',
-            data: players.map(p => ({ id: p.id, name: p.name, balance: p.balance, cards: p.cards }))
-        });
+        // Remove from players list
+        gameState.players = gameState.players.filter(p => p.id !== player.id);
+        broadcastGameState();
     });
 });
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`🚀 BINGO Server running on port ${PORT}`);
+    console.log(`ðŸš€ BINGO Server running on port ${PORT}`);
+    console.log('ðŸ“Š Game state initialized for multiplayer');
 });
