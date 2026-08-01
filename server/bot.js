@@ -1,17 +1,25 @@
 // ============================================================
 //  TELEGRAM BOT - @M_bingo_bot
-//  Matches Cartela BINGO structure
+//  Updated with Game Control Commands & Shared Multiplayer
 // ============================================================
 
 const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
 
-// ⚠️ REPLACE WITH YOUR NEW TOKEN (after revoking the old one)
+// âš ï¸ REPLACE WITH YOUR NEW TOKEN (after revoking the old one)
 const BOT_TOKEN = '8312462723:AAHVyOGm7vDKJD7M_8ZceQzgvwLkMGc6dEU';
 const GAME_URL = 'https://myf-delivery.github.io/M-Bingo/';
 const SERVER_URL = 'https://m-bingo-server.onrender.com';
 
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
+
+// ============================================================
+//  ADMIN CONFIGURATION
+// ============================================================
+
+// âš ï¸ REPLACE WITH YOUR TELEGRAM USER ID
+// Get your ID from: @userinfobot
+const ADMIN_IDS = [123456789]; // â† PUT YOUR TELEGRAM ID HERE
 
 // ============================================================
 //  MAIN MENU
@@ -21,11 +29,12 @@ function mainMenu() {
     return {
         reply_markup: {
             inline_keyboard: [
-                [{ text: '🎯 Play BINGO', web_app: { url: GAME_URL } }],
-                [{ text: '📋 Rules', callback_data: 'rules' }, { text: '💰 Balance', callback_data: 'balance' }],
-                [{ text: '👥 Friends', callback_data: 'friends' }, { text: '🏆 Winners', callback_data: 'winners' }],
-                [{ text: '❓ Help', callback_data: 'help' }],
-                [{ text: '👑 Admin', callback_data: 'admin_login' }]
+                [{ text: 'ðŸŽ¯ Play BINGO', web_app: { url: GAME_URL } }],
+                [{ text: 'ðŸ“‹ Rules', callback_data: 'rules' }, { text: 'ðŸ’° Balance', callback_data: 'balance' }],
+                [{ text: 'ðŸ‘¥ Friends', callback_data: 'friends' }, { text: 'ðŸ† Winners', callback_data: 'winners' }],
+                [{ text: 'ðŸ“Š Game Status', callback_data: 'game_status' }],
+                [{ text: 'â“ Help', callback_data: 'help' }],
+                [{ text: 'ðŸ‘‘ Admin', callback_data: 'admin_login' }]
             ]
         }
     };
@@ -42,29 +51,29 @@ bot.onText(/\/start/, async (msg) => {
     
     // Check for referral code
     let referralMessage = '';
-    if (text.includes('ref_')) {
+    if (text && text.includes('ref_')) {
         const refCode = text.split('ref_')[1];
-        referralMessage = `\n\n🎁 You were invited by a friend! You get 20 ብር bonus!`;
+        referralMessage = `\n\nðŸŽ You were invited by a friend! You get 20 á‰¥áˆ­ bonus!`;
         // TODO: Add bonus logic
     }
     
     const welcomeText = `
-🎯 *Welcome to M BINGO!*
+ðŸŽ¯ *Welcome to M BINGO!*
 
 Play the classic BINGO game with friends and win real prizes!
 
 *How to Play:*
-1️⃣ Click "Play BINGO" to open the game
-2️⃣ Register with your name
-3️⃣ Select your stake (10-200 ብር)
-4️⃣ Choose 1-5 cards
-5️⃣ Wait for other players
-6️⃣ Game starts automatically with 2+ players!
-7️⃣ First to complete a pattern wins! 🏆
+1ï¸âƒ£ Click "Play BINGO" to open the game
+2ï¸âƒ£ Register with your name
+3ï¸âƒ£ Select your stake (10-200 á‰¥áˆ­)
+4ï¸âƒ£ Choose 1-5 cards
+5ï¸âƒ£ Wait for other players
+6ï¸âƒ£ Game starts automatically with 2+ players!
+7ï¸âƒ£ First to complete a pattern wins! ðŸ†
 
 *Prizes:* 70% of total bets go to the winner!
 
-🔗 *Share with friends:* @M_bingo_bot${referralMessage}
+ðŸ”— *Share with friends:* @M_bingo_bot${referralMessage}
     `;
     
     bot.sendMessage(chatId, welcomeText, { 
@@ -77,26 +86,26 @@ Play the classic BINGO game with friends and win real prizes!
 bot.onText(/\/help/, (msg) => {
     const chatId = msg.chat.id;
     const helpText = `
-📖 *BINGO Help Guide*
+ðŸ“– *BINGO Help Guide*
 
-🎯 *How to Play:*
-• Click "Play BINGO" to start
-• Select your bet amount
-• Choose 1-5 BINGO cards
-• Game starts with 2+ players
-• Numbers are called automatically
-• First to get BINGO wins!
+ðŸŽ¯ *How to Play:*
+â€¢ Click "Play BINGO" to start
+â€¢ Select your bet amount
+â€¢ Choose 1-5 BINGO cards
+â€¢ Game starts with 2+ players
+â€¢ Numbers are called automatically
+â€¢ First to get BINGO wins!
 
-💰 *Balance:*
-• Start with 500 ብር
-• Deposit via admin
-• Withdraw your winnings
+ðŸ’° *Balance:*
+â€¢ Start with 500 á‰¥áˆ­
+â€¢ Deposit via admin
+â€¢ Withdraw your winnings
 
-🎁 *Invite Friends:*
-• Share @M_bingo_bot
-• Get 20 ብር bonus when friends join!
+ðŸŽ *Invite Friends:*
+â€¢ Share @M_bingo_bot
+â€¢ Get 20 á‰¥áˆ­ bonus when friends join!
 
-👑 *Admin Contact:*
+ðŸ‘‘ *Admin Contact:*
 Contact @YOUR_USERNAME for support
     `;
     bot.sendMessage(chatId, helpText, { parse_mode: 'Markdown' });
@@ -113,17 +122,199 @@ bot.onText(/\/balance/, async (msg) => {
             const data = response.data;
             bot.sendMessage(
                 chatId,
-                `💰 *Your Balance:* ${data.balance} ብር\n\n` +
-                `📊 *Games Played:* ${data.games || 0}\n` +
-                `🏆 *Wins:* ${data.wins || 0}`,
+                `ðŸ’° *Your Balance:* ${data.balance} á‰¥áˆ­\n\n` +
+                `ðŸ“Š *Games Played:* ${data.games || 0}\n` +
+                `ðŸ† *Wins:* ${data.wins || 0}`,
                 { parse_mode: 'Markdown' }
             );
         } else {
-            bot.sendMessage(chatId, '⚠️ Could not fetch balance. Please play a game first.');
+            bot.sendMessage(chatId, 'âš ï¸ Could not fetch balance. Please play a game first.');
         }
     } catch (error) {
-        bot.sendMessage(chatId, '⚠️ Server connection error. Please try again later.');
+        bot.sendMessage(chatId, 'âš ï¸ Server connection error. Please try again later.');
     }
+});
+
+// ============================================================
+//  GAME CONTROL COMMANDS (Admin Only)
+// ============================================================
+
+// /gamestatus - Check current game status (anyone can use)
+bot.onText(/\/gamestatus/, async (msg) => {
+    const chatId = msg.chat.id;
+    
+    try {
+        const response = await axios.get(`${SERVER_URL}/api/game-state`);
+        const state = response.data;
+        
+        let statusText = `ðŸ“Š *Game Status*\n\n`;
+        statusText += `Status: ${state.status || 'waiting'}\n`;
+        statusText += `Players: ${state.players || 0}\n`;
+        statusText += `Cards Selected: ${state.selectedCards?.length || 0}\n`;
+        statusText += `Selection Time: ${state.selectionTimeLeft || 0}s\n`;
+        statusText += `Numbers Called: ${state.calledNumbers?.length || 0}/75\n`;
+        
+        if (state.players && state.players > 0) {
+            statusText += `\nðŸ‘¥ *Players with cards:*\n`;
+            // Get player details
+            const playersRes = await axios.get(`${SERVER_URL}/api/players`);
+            if (playersRes.status === 200) {
+                playersRes.data.forEach(p => {
+                    if (p.cards > 0) {
+                        statusText += `â€¢ ${p.name} - ${p.cards} cards ${p.isReady ? 'âœ…' : 'â³'}\n`;
+                    }
+                });
+            }
+        }
+        
+        bot.sendMessage(chatId, statusText, { parse_mode: 'Markdown' });
+    } catch (error) {
+        bot.sendMessage(chatId, 'âš ï¸ Error fetching game status');
+    }
+});
+
+// /startgame - Force start the game (admin only)
+bot.onText(/\/startgame/, async (msg) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+    
+    if (!ADMIN_IDS.includes(userId)) {
+        bot.sendMessage(chatId, 'â›” You are not authorized to use this command.');
+        return;
+    }
+    
+    try {
+        // Send request to server to force start
+        const response = await axios.post(`${SERVER_URL}/api/force-start`, {});
+        if (response.status === 200) {
+            bot.sendMessage(chatId, 'âœ… Game started successfully! All players with cards are now playing.');
+        } else {
+            bot.sendMessage(chatId, 'âš ï¸ Could not start game. Make sure at least 2 players have cards.');
+        }
+    } catch (error) {
+        bot.sendMessage(chatId, 'âš ï¸ Error starting game. Need at least 2 players with cards.');
+    }
+});
+
+// /players - Show all players and their cards (admin only)
+bot.onText(/\/players/, async (msg) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+    
+    if (!ADMIN_IDS.includes(userId)) {
+        bot.sendMessage(chatId, 'â›” You are not authorized to use this command.');
+        return;
+    }
+    
+    try {
+        const response = await axios.get(`${SERVER_URL}/api/players`);
+        const players = response.data;
+        
+        if (!players || players.length === 0) {
+            bot.sendMessage(chatId, 'No players connected.');
+            return;
+        }
+        
+        let text = 'ðŸ‘¥ *Players*\n\n';
+        players.forEach(p => {
+            text += `â€¢ ${p.name || 'Player'} - ðŸ’° ${p.balance} á‰¥áˆ­ - ðŸŽ´ ${p.cards || 0} cards ${p.isReady ? 'âœ… Ready' : 'â³ Waiting'}\n`;
+        });
+        
+        // Show total
+        const totalCards = players.reduce((sum, p) => sum + (p.cards || 0), 0);
+        text += `\nðŸ“Š *Total:* ${players.length} players, ${totalCards} cards selected`;
+        
+        bot.sendMessage(chatId, text, { parse_mode: 'Markdown' });
+    } catch (error) {
+        bot.sendMessage(chatId, 'âš ï¸ Error fetching players');
+    }
+});
+
+// /addbalance [telegram_id] [amount] - Admin only
+bot.onText(/\/addbalance (\d+) (\d+)/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+    
+    if (!ADMIN_IDS.includes(userId)) {
+        bot.sendMessage(chatId, 'â›” Unauthorized');
+        return;
+    }
+    
+    const targetId = parseInt(match[1]);
+    const amount = parseInt(match[2]);
+    
+    try {
+        const response = await axios.post(`${SERVER_URL}/api/add-balance`, {
+            telegramId: targetId,
+            amount: amount
+        });
+        
+        if (response.status === 200) {
+            bot.sendMessage(chatId, `âœ… Added ${amount} á‰¥áˆ­ to player! New balance: ${response.data.newBalance} á‰¥áˆ­`);
+        } else {
+            bot.sendMessage(chatId, 'âš ï¸ Could not add balance.');
+        }
+    } catch (error) {
+        bot.sendMessage(chatId, 'âš ï¸ Error: Player not found or server error.');
+    }
+});
+
+// /withdraw [telegram_id] [amount] - Admin only
+bot.onText(/\/withdraw (\d+) (\d+)/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+    
+    if (!ADMIN_IDS.includes(userId)) {
+        bot.sendMessage(chatId, 'â›” Unauthorized');
+        return;
+    }
+    
+    const targetId = parseInt(match[1]);
+    const amount = parseInt(match[2]);
+    
+    try {
+        const response = await axios.post(`${SERVER_URL}/api/remove-balance`, {
+            telegramId: targetId,
+            amount: amount
+        });
+        
+        if (response.status === 200) {
+            bot.sendMessage(chatId, `âœ… Removed ${amount} á‰¥áˆ­ from player! New balance: ${response.data.newBalance} á‰¥áˆ­`);
+        } else {
+            bot.sendMessage(chatId, 'âš ï¸ Could not remove balance.');
+        }
+    } catch (error) {
+        if (error.response && error.response.status === 400) {
+            bot.sendMessage(chatId, 'âš ï¸ Insufficient balance.');
+        } else {
+            bot.sendMessage(chatId, 'âš ï¸ Error: Player not found or server error.');
+        }
+    }
+});
+
+// /admin - Admin panel
+bot.onText(/\/admin/, (msg) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+    
+    if (!ADMIN_IDS.includes(userId)) {
+        bot.sendMessage(chatId, 'â›” You are not authorized to use this command.');
+        return;
+    }
+    
+    bot.sendMessage(chatId, 'ðŸ‘‘ *Admin Panel*\n\nSelect an action:', {
+        parse_mode: 'Markdown',
+        reply_markup: {
+            inline_keyboard: [
+                [{ text: 'ðŸ‘¥ View Players', callback_data: 'admin_players' }],
+                [{ text: 'ðŸ’° Add Balance', callback_data: 'admin_add' }],
+                [{ text: 'ðŸ¦ Withdraw', callback_data: 'admin_withdraw' }],
+                [{ text: 'ðŸ“Š Game Status', callback_data: 'game_status' }],
+                [{ text: 'â–¶ï¸ Start Game', callback_data: 'admin_start_game' }],
+                [{ text: 'ðŸ”™ Back to Menu', callback_data: 'back_to_menu' }]
+            ]
+        }
+    });
 });
 
 // ============================================================
@@ -134,6 +325,7 @@ bot.on('callback_query', async (call) => {
     const chatId = call.message.chat.id;
     const messageId = call.message.message_id;
     const data = call.data;
+    const userId = call.from.id;
     
     // Acknowledge the callback
     bot.answerCallbackQuery(call.id);
@@ -141,27 +333,27 @@ bot.on('callback_query', async (call) => {
     switch (data) {
         case 'rules':
             const rulesText = `
-📋 *BINGO Rules*
+ðŸ“‹ *BINGO Rules*
 
-🎯 *Goal:* Complete a pattern on your card first!
+ðŸŽ¯ *Goal:* Complete a pattern on your card first!
 
-🔢 *Numbers:* 1-75 are called randomly
+ðŸ”¢ *Numbers:* 1-75 are called randomly
 
-🏆 *Winning Patterns:*
-• Row - 5 numbers in a horizontal line
-• Column - 5 numbers in a vertical line
-• Diagonal - 5 numbers diagonally
-• Corners - All 4 corners
+ðŸ† *Winning Patterns:*
+â€¢ Row - 5 numbers in a horizontal line
+â€¢ Column - 5 numbers in a vertical line
+â€¢ Diagonal - 5 numbers diagonally
+â€¢ Corners - All 4 corners
 
-💰 *Stakes:* 10, 20, 30, 50, 100, 200 ብር
+ðŸ’° *Stakes:* 10, 20, 30, 50, 100, 200 á‰¥áˆ­
 
-🎁 *Prize Pool:* 70% of total bets
+ðŸŽ *Prize Pool:* 70% of total bets
 
-⚡ *Auto-Start:* Game begins with 2+ players
+âš¡ *Auto-Start:* Game begins with 2+ players
 
-👥 *Max Players:* Unlimited!
+ðŸ‘¥ *Max Players:* Unlimited!
 
-Good luck! 🍀
+Good luck! ðŸ€
             `;
             bot.editMessageText(rulesText, {
                 chat_id: chatId,
@@ -169,32 +361,31 @@ Good luck! 🍀
                 parse_mode: 'Markdown',
                 reply_markup: {
                     inline_keyboard: [
-                        [{ text: '🔙 Back to Menu', callback_data: 'back_to_menu' }]
+                        [{ text: 'ðŸ”™ Back to Menu', callback_data: 'back_to_menu' }]
                     ]
                 }
             });
             break;
             
         case 'balance':
-            // Trigger the balance command
-            bot.emit('text', { chat: { id: chatId }, from: { id: call.from.id } }, '/balance');
+            bot.emit('text', { chat: { id: chatId }, from: { id: userId } }, '/balance');
             break;
             
         case 'friends':
             const friendsText = `
-👥 *Invite Friends!*
+ðŸ‘¥ *Invite Friends!*
 
 Share this bot with your friends:
-📍 @M_bingo_bot
+ðŸ“ @M_bingo_bot
 
-🎁 *Invite Bonus:*
-• You get 20 ብር when your friend plays!
-• Your friend starts with 20 ብር bonus!
+ðŸŽ *Invite Bonus:*
+â€¢ You get 20 á‰¥áˆ­ when your friend plays!
+â€¢ Your friend starts with 20 á‰¥áˆ­ bonus!
 
-📤 *Share Link:*
-https://t.me/M_bingo_bot?start=ref_${call.from.id}
+ðŸ“¤ *Share Link:*
+https://t.me/M_bingo_bot?start=ref_${userId}
 
-🔗 *Referral Code:* ${call.from.id}
+ðŸ”— *Referral Code:* ${userId}
             `;
             bot.editMessageText(friendsText, {
                 chat_id: chatId,
@@ -202,7 +393,7 @@ https://t.me/M_bingo_bot?start=ref_${call.from.id}
                 parse_mode: 'Markdown',
                 reply_markup: {
                     inline_keyboard: [
-                        [{ text: '🔙 Back to Menu', callback_data: 'back_to_menu' }]
+                        [{ text: 'ðŸ”™ Back to Menu', callback_data: 'back_to_menu' }]
                     ]
                 }
             });
@@ -211,10 +402,10 @@ https://t.me/M_bingo_bot?start=ref_${call.from.id}
         case 'winners':
             try {
                 const response = await axios.get(`${SERVER_URL}/api/recent-winners`);
-                let winnersText = '🏆 *Recent Winners:*\n\n';
-                if (response.status === 200 && response.data.length > 0) {
+                let winnersText = 'ðŸ† *Recent Winners:*\n\n';
+                if (response.status === 200 && response.data && response.data.length > 0) {
                     response.data.slice(-5).forEach(w => {
-                        winnersText += `👤 ${w.name} - ${w.prize} ብር\n`;
+                        winnersText += `ðŸ‘¤ ${w.name || 'Player'} - ${w.prize || 0} á‰¥áˆ­\n`;
                     });
                 } else {
                     winnersText += 'No winners yet. Be the first!';
@@ -225,21 +416,25 @@ https://t.me/M_bingo_bot?start=ref_${call.from.id}
                     parse_mode: 'Markdown',
                     reply_markup: {
                         inline_keyboard: [
-                            [{ text: '🔙 Back to Menu', callback_data: 'back_to_menu' }]
+                            [{ text: 'ðŸ”™ Back to Menu', callback_data: 'back_to_menu' }]
                         ]
                     }
                 });
             } catch (error) {
-                bot.editMessageText('⚠️ Could not fetch winners.', {
+                bot.editMessageText('âš ï¸ Could not fetch winners.', {
                     chat_id: chatId,
                     message_id: messageId,
                     reply_markup: {
                         inline_keyboard: [
-                            [{ text: '🔙 Back to Menu', callback_data: 'back_to_menu' }]
+                            [{ text: 'ðŸ”™ Back to Menu', callback_data: 'back_to_menu' }]
                         ]
                     }
                 });
             }
+            break;
+            
+        case 'game_status':
+            bot.emit('text', { chat: { id: chatId }, from: { id: userId } }, '/gamestatus');
             break;
             
         case 'help':
@@ -247,13 +442,11 @@ https://t.me/M_bingo_bot?start=ref_${call.from.id}
             break;
             
         case 'admin_login':
-            bot.sendMessage(chatId, '👑 *Admin Panel*\n\nEnter admin password:');
-            // In production, implement proper password handling
-            bot.sendMessage(chatId, 'Use /admin command if you have access.');
+            bot.sendMessage(chatId, 'ðŸ‘‘ *Admin Panel*\n\nUse /admin command if you have access.');
             break;
             
         case 'back_to_menu':
-            const menuText = '🎯 *Welcome to M BINGO!*\n\nSelect an option:';
+            const menuText = 'ðŸŽ¯ *Welcome to M BINGO!*\n\nSelect an option:';
             bot.editMessageText(menuText, {
                 chat_id: chatId,
                 message_id: messageId,
@@ -261,96 +454,77 @@ https://t.me/M_bingo_bot?start=ref_${call.from.id}
                 ...mainMenu()
             });
             break;
-    }
-});
-
-// ============================================================
-//  ADMIN COMMAND (Hidden)
-// ============================================================
-
-// Allow only specific Telegram IDs (replace with yours)
-const ADMIN_IDS = [123456789]; // Replace with your Telegram ID
-
-bot.onText(/\/admin/, (msg) => {
-    const chatId = msg.chat.id;
-    const userId = msg.from.id;
-    
-    if (!ADMIN_IDS.includes(userId)) {
-        bot.sendMessage(chatId, '⛔ You are not authorized to use this command.');
-        return;
-    }
-    
-    bot.sendMessage(chatId, '👑 *Admin Panel*\n\nSelect an action:', {
-        parse_mode: 'Markdown',
-        reply_markup: {
-            inline_keyboard: [
-                [{ text: '👥 View Players', callback_data: 'admin_players' }],
-                [{ text: '💰 Add Balance', callback_data: 'admin_add' }],
-                [{ text: '🏦 Withdraw', callback_data: 'admin_withdraw' }],
-                [{ text: '📊 Stats', callback_data: 'admin_stats' }],
-                [{ text: '🔙 Back to Menu', callback_data: 'back_to_menu' }]
-            ]
-        }
-    });
-});
-
-// Handle admin callbacks
-bot.on('callback_query', async (call) => {
-    // ... existing code ...
-    
-    if (call.data.startsWith('admin_')) {
-        const chatId = call.message.chat.id;
-        const userId = call.from.id;
-        
-        if (!ADMIN_IDS.includes(userId)) {
-            bot.answerCallbackQuery(call.id, '⛔ Unauthorized');
-            return;
-        }
-        
-        switch (call.data) {
-            case 'admin_players':
-                try {
-                    const response = await axios.get(`${SERVER_URL}/api/players`);
-                    let text = '👥 *Connected Players:*\n\n';
-                    if (response.status === 200 && response.data.length > 0) {
-                        response.data.forEach(p => {
-                            text += `• ${p.name} - 💰 ${p.balance} ብር (${p.cards || 0} cards)\n`;
-                        });
-                    } else {
-                        text += 'No players connected.';
-                    }
-                    bot.answerCallbackQuery(call.id);
-                    bot.editMessageText(text, {
-                        chat_id: chatId,
-                        message_id: call.message.message_id,
-                        parse_mode: 'Markdown',
-                        reply_markup: {
-                            inline_keyboard: [
-                                [{ text: '🔙 Back to Admin', callback_data: 'admin_back' }]
-                            ]
-                        }
+            
+        // ============================================================
+        //  ADMIN CALLBACKS
+        // ============================================================
+            
+        case 'admin_players':
+            if (!ADMIN_IDS.includes(userId)) {
+                bot.sendMessage(chatId, 'â›” Unauthorized');
+                break;
+            }
+            try {
+                const playersRes = await axios.get(`${SERVER_URL}/api/players`);
+                let text = 'ðŸ‘¥ *Connected Players:*\n\n';
+                if (playersRes.status === 200 && playersRes.data && playersRes.data.length > 0) {
+                    playersRes.data.forEach(p => {
+                        text += `â€¢ ${p.name || 'Player'} - ðŸ’° ${p.balance} á‰¥áˆ­ (${p.cards || 0} cards) ${p.isReady ? 'âœ…' : 'â³'}\n`;
                     });
-                } catch (error) {
-                    bot.answerCallbackQuery(call.id, '⚠️ Error fetching players');
+                } else {
+                    text += 'No players connected.';
                 }
+                bot.editMessageText(text, {
+                    chat_id: chatId,
+                    message_id: messageId,
+                    parse_mode: 'Markdown',
+                    reply_markup: {
+                        inline_keyboard: [
+                            [{ text: 'ðŸ”™ Back to Admin', callback_data: 'admin_back' }]
+                        ]
+                    }
+                });
+            } catch (error) {
+                bot.sendMessage(chatId, 'âš ï¸ Error fetching players');
+            }
+            break;
+            
+        case 'admin_add':
+            if (!ADMIN_IDS.includes(userId)) {
+                bot.sendMessage(chatId, 'â›” Unauthorized');
                 break;
-                
-            case 'admin_add':
-                bot.answerCallbackQuery(call.id, 'Send /addbalance [player_id] [amount]');
+            }
+            bot.sendMessage(chatId, 'ðŸ’° *Add Balance*\n\nSend: /addbalance [telegram_id] [amount]\n\nExample: /addbalance 123456789 100');
+            break;
+            
+        case 'admin_withdraw':
+            if (!ADMIN_IDS.includes(userId)) {
+                bot.sendMessage(chatId, 'â›” Unauthorized');
                 break;
-                
-            case 'admin_withdraw':
-                bot.answerCallbackQuery(call.id, 'Send /withdraw [player_id] [amount]');
+            }
+            bot.sendMessage(chatId, 'ðŸ¦ *Withdraw*\n\nSend: /withdraw [telegram_id] [amount]\n\nExample: /withdraw 123456789 50');
+            break;
+            
+        case 'admin_start_game':
+            if (!ADMIN_IDS.includes(userId)) {
+                bot.sendMessage(chatId, 'â›” Unauthorized');
                 break;
-                
-            case 'admin_stats':
-                bot.answerCallbackQuery(call.id, `📊 Total players: ${players.length || 0}`);
+            }
+            try {
+                await axios.post(`${SERVER_URL}/api/force-start`, {});
+                bot.sendMessage(chatId, 'âœ… Game started successfully!');
+            } catch (error) {
+                bot.sendMessage(chatId, 'âš ï¸ Could not start game. Need at least 2 players with cards.');
+            }
+            break;
+            
+        case 'admin_back':
+            if (!ADMIN_IDS.includes(userId)) {
+                bot.sendMessage(chatId, 'â›” Unauthorized');
                 break;
-                
-            case 'admin_back':
-                bot.emit('text', { chat: { id: chatId }, from: { id: userId } }, '/admin');
-                break;
-        }
+            }
+            bot.emit('text', { chat: { id: chatId }, from: { id: userId } }, '/admin');
+            break;
     }
 });
 
@@ -362,10 +536,16 @@ bot.on('inline_query', (query) => {
     const results = [{
         type: 'article',
         id: '1',
-        title: 'Play BINGO with friends!',
+        title: 'ðŸŽ¯ Play BINGO with friends!',
         description: 'Join @M_bingo_bot and win prizes!',
+        thumb_url: 'https://myf-delivery.github.io/M-Bingo/icon.png',
         input_message_content: {
-            message_text: "🎯 Join me on BINGO!\n\nPlay with friends and win prizes!\n👉 @M_bingo_bot"
+            message_text: "ðŸŽ¯ Join me on BINGO!\n\nPlay with friends and win prizes!\nðŸ‘‰ @M_bingo_bot"
+        },
+        reply_markup: {
+            inline_keyboard: [
+                [{ text: 'ðŸŽ¯ Play BINGO', web_app: { url: GAME_URL } }]
+            ]
         }
     }];
     bot.answerInlineQuery(query.id, results);
@@ -379,20 +559,22 @@ bot.on('message', (msg) => {
     const chatId = msg.chat.id;
     const text = msg.text;
     
-    if (text && !text.startsWith('/')) {
-        bot.sendMessage(
-            chatId,
-            '❓ I don\'t understand that command.\n\nUse /start to see the menu.',
-            mainMenu()
-        );
-    }
+    // Ignore commands (they're handled above)
+    if (text && text.startsWith('/')) return;
+    
+    bot.sendMessage(
+        chatId,
+        'â“ I don\'t understand that.\n\nUse /start to see the menu.',
+        mainMenu()
+    );
 });
 
 // ============================================================
-//  START BOT
+//  START THE BOT
 // ============================================================
 
-console.log('🤖 BINGO Bot is running...');
-console.log(`📍 Game URL: ${GAME_URL}`);
-console.log(`🔗 Server: ${SERVER_URL}`);
+console.log('ðŸ¤– M BINGO Bot is running...');
+console.log(`ðŸ“ Game URL: ${GAME_URL}`);
+console.log(`ðŸ”— Server: ${SERVER_URL}`);
+console.log('ðŸ“Š Admin IDs:', ADMIN_IDS);
 console.log('Press Ctrl+C to stop');
