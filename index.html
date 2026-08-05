@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="am">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ማታኒ ቢንጎ · Multiplayer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        body {
+            background: #0a0e1a;
+            color: #f0f3fa;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 12px;
+        }
+
+        .app-container {
+            max-width: 480px;
+            width: 100%;
+            background: linear-gradient(145deg, #111827, #0b111f);
+            border-radius: 36px;
+            padding: 20px 16px 30px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 215, 0, 0.1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            padding: 0 4px;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .brand h1 {
+            font-size: 20px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #fbbf24, #f59e0b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.3px;
+        }
+
+        .brand .badge {
+            background: #fbbf24;
+            color: #0a0e1a;
+            font-size: 9px;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 30px;
+            -webkit-text-fill-color: #0a0e1a;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .connection-status {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .connection-status.connected { background: #34d399; box-shadow: 0 0 8px #34d399; }
+        .connection-status.disconnected { background: #f87171; box-shadow: 0 0 8px #f87171; }
+        .connection-status.connecting { background: #fbbf24; box-shadow: 0 0 8px #fbbf24; }
+
+        .balance-box {
+            background: rgba(255, 215, 0, 0.08);
+            border: 1px solid rgba(255, 215, 0, 0.2);
+            padding: 4px 14px;
+            border-radius: 40px;
+            font-size: 15px;
+            font-weight: 600;
+            color: #fbbf24;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            backdrop-filter: blur(4px);
+        }
+
+        /* pages */
+        .page {
+            display: none;
+            animation: fade 0.25s ease;
+        }
+        .page.active { display: block; }
+
+        @keyframes fade {
+            0% { opacity: 0.4; transform: translateY(6px); }
+            100% { opacity: 1; transform: translateY(0); }
+        }
+
+        /* home */
+        .home-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+            margin-top: 10px;
+        }
+
+        .hero-card {
+            background: linear-gradient(135deg, #1e293b, #0f172a);
+            border-radius: 28px;
+            padding: 24px 20px;
+            border: 1px solid #334155;
+            text-align: center;
+        }
+
+        .hero-card h2 {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+        .hero-card p {
+            color: #94a3b8;
+            font-size: 14px;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 14px 24px;
+            border: none;
+            border-radius: 60px;
+            font-weight: 600;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: #334155;
+            color: #f0f3fa;
+            width: 100%;
+        }
+
+        .btn-gold {
+            background: linear-gradient(135deg, #fbbf24, #f59e0b);
+            color: #0a0e1a;
+            box-shadow: 0 6px 16px rgba(251, 191, 36, 0.25);
+        }
+        .btn-gold:active { transform: scale(0.97); }
+
+        .btn-primary {
+            background: #3b82f6;
+            color: white;
+            box-shadow: 0 6px 16px rgba(59, 130, 246, 0.25);
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1.5px solid #475569;
+            color: #e2e8f0;
+        }
+
+        .btn-sm {
+            padding: 8px 16px;
+            font-size: 13px;
+            width: auto;
+        }
+
+        .mt-8 { margin-top: 8px; }
+        .mt-12 { margin-top: 12px; }
+        .gap-8 { gap: 8px; }
+        .flex { display: flex; }
+        .flex-col { flex-direction: column; }
+        .items-center { align-items: center; }
+
+        /* selection page */
+        .selection-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+            margin-top: 16px;
+        }
+
+        .card-option {
+            background: #1e293b;
+            border-radius: 20px;
+            padding: 18px 10px;
+            text-align: center;
+            border: 2px solid transparent;
+            transition: 0.15s;
+            cursor: pointer;
+        }
+        .card-option.active {
+            border-color: #fbbf24;
+            background: #2d374b;
+        }
+        .card-option .price {
+            font-weight: 700;
+            font-size: 22px;
+            color: #fbbf24;
+        }
+        .card-option .label {
+            font-size: 13px;
+            color: #94a3b8;
+        }
+
+        .stake-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+            margin: 12px 0;
+        }
+        .stake-btn {
+            background: #1e293b;
+            border: 2px solid #334155;
+            border-radius: 40px;
+            padding: 10px 22px;
+            font-weight: 600;
+            color: #e2e8f0;
+            cursor: pointer;
+            transition: 0.1s;
+            flex: 1 0 auto;
+        }
+        .stake-btn.active {
+            border-color: #fbbf24;
+            background: #2d374b;
+            color: #fbbf24;
+        }
+
+        /* modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(6px);
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            z-index: 1000;
+        }
+        .modal-overlay.show {
+            display: flex;
+        }
+        .modal-content {
+            background: #1e293b;
+            max-width: 400px;
+            width: 100%;
+            border-radius: 32px;
+            padding: 28px 20px;
+            border: 1px solid #334155;
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.6);
+            animation: fade 0.2s ease;
+        }
+        .modal-title {
+            font-size: 22px;
+            font-weight: 700;
+            margin-bottom: 18px;
+            text-align: center;
+        }
+        .form-group {
+            margin-bottom: 14px;
+        }
+        .form-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 500;
+            color: #94a3b8;
+            margin-bottom: 4px;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 12px 16px;
+            border-radius: 40px;
+            border: 1px solid #334155;
+            background: #0f172a;
+            color: #f0f3fa;
+            font-size: 15px;
+            outline: none;
+        }
+        .form-group input:focus {
+            border-color: #fbbf24;
+        }
+
+        /* winning overlay */
+        .winning-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(8px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            padding: 20px;
+        }
+        .winning-overlay.show {
+            display: flex;
+        }
+        .win-card {
+            background: linear-gradient(135deg, #1e293b, #0f172a);
+            padding: 40px 28px;
+            border-radius: 48px;
+            text-align: center;
+            border: 2px solid #fbbf24;
+            max-width: 340px;
+            width: 100%;
+            box-shadow: 0 0 60px rgba(251, 191, 36, 0.2);
+        }
+        .win-card .big {
+            font-size: 52px;
+            font-weight: 800;
+            color: #fbbf24;
+        }
+        .win-card .sub {
+            font-size: 18px;
+            margin-top: 8px;
+            color: #e2e8f0;
+        }
+
+        .status-bar {
+            background: #1e293b;
+            border-radius: 40px;
+            padding: 8px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 10px 0 4px;
+            font-size: 13px;
+            color: #94a3b8;
+        }
+        .status-bar span:last-child {
+            color: #e2e8f0;
+            font-weight: 500;
+        }
+
+        /* responsive */
+        @media (max-width: 400px) {
+            .brand h1 { font-size: 17px; }
+            .balance-box { font-size: 13px; padding: 2px 10px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container" id="app">
+
+        <!-- header -->
+        <div class="header">
+            <div class="brand">
+                <h1>M·BINGO</h1>
+                <span class="badge">multi</span>
+            </div>
+            <div class="header-actions">
+                <span class="connection-status connecting" id="statusDot"></span>
+                <span class="balance-box" id="headerBalance">0</span>
+            </div>
+        </div>
+
+        <!-- status row -->
+        <div class="status-bar">
+            <span>🟢 <span id="statusText">Connecting...</span></span>
+            <span>👥 <span id="playerCountDisplay">0</span></span>
+        </div>
+
+        <!-- pages -->
+        <!-- HOME -->
+        <div class="page active" id="page-home">
+            <div class="home-grid">
+                <div class="hero-card">
+                    <h2>🎯 ማታኒ ቢንጎ</h2>
+                    <p>ከጓደኞችዎ ጋር በቀጥታ ይጫወቱ</p>
+                    <button class="btn btn-gold mt-12" onclick="handleRegister()">📝 ይመዝገቡ</button>
+                    <button class="btn btn-primary mt-8" onclick="showStakeSelection()">🎮 ጨዋታ ይጀምሩ</button>
+                </div>
+                <div style="display:flex; gap:10px;">
+                    <button class="btn btn-outline btn-sm" onclick="showDeposit()">💰 አስገባ</button>
+                    <button class="btn btn-outline btn-sm" onclick="showWithdraw()">🏦 አውጣ</button>
+                    <button class="btn btn-outline btn-sm" onclick="connectWebSocket()">🔄 አገናኝ</button>
+                </div>
+                <div style="font-size:13px; color:#64748b; text-align:center; margin-top:4px;">
+                    🤖 ቦት: <a href="https://t.me/M_bingo_bot" style="color:#fbbf24;">@M_bingo_bot</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- SELECTION (stake & card) -->
+        <div class="page" id="page-selection">
+            <h3 style="margin-bottom:4px;">⚡ ክምችት ይምረጡ</h3>
+            <div class="stake-grid" id="stakeGrid">
+                <button class="stake-btn" data-stake="10" onclick="selectStake(this)">10 ብር</button>
+                <button class="stake-btn" data-stake="20" onclick="selectStake(this)">20 ብር</button>
+                <button class="stake-btn" data-stake="50" onclick="selectStake(this)">50 ብር</button>
+                <button class="stake-btn" data-stake="100" onclick="selectStake(this)">100 ብር</button>
+            </div>
+            <button class="btn btn-gold" id="stakeConfirmBtn" disabled onclick="confirmStake()">✅ አረጋግጥ</button>
+            <button class="btn btn-outline mt-8" onclick="showPage('page-home')">⬅ ተመለስ</button>
+            <div style="margin-top:14px; background:#1e293b; border-radius:20px; padding:12px; text-align:center;">
+                <span style="color:#94a3b8;">የተመረጠ: </span><span id="selStake" style="font-weight:600; color:#fbbf24;">-</span>
+            </div>
+        </div>
+
+        <!-- modals -->
+        <div class="modal-overlay" id="stakeModal">
+            <div class="modal-content">
+                <div class="modal-title">🎯 ክምችት ይምረጡ</div>
+                <div class="stake-grid">
+                    <button class="stake-btn" data-stake="10" onclick="selectStake(this)">10 ብር</button>
+                    <button class="stake-btn" data-stake="20" onclick="selectStake(this)">20 ብር</button>
+                    <button class="stake-btn" data-stake="50" onclick="selectStake(this)">50 ብር</button>
+                    <button class="stake-btn" data-stake="100" onclick="selectStake(this)">100 ብር</button>
+                </div>
+                <button class="btn btn-gold" id="stakeConfirmBtn" disabled onclick="confirmStake()">✅ አረጋግጥ</button>
+                <button class="btn btn-outline mt-8" onclick="closeModal('stakeModal')">✖ ዝጋ</button>
+            </div>
+        </div>
+
+        <div class="modal-overlay" id="depositModal">
+            <div class="modal-content">
+                <div class="modal-title">💰 ገንዘብ አስገባ</div>
+                <div class="form-group"><label>መጠን (50-5000 ብር)</label><input type="number" id="depositAmount" min="50" max="5000" placeholder="ለምሳሌ 100"></div>
+                <div style="background:#0f172a;border-radius:12px;padding:12px;margin:12px 0;border:1px solid #334155;">
+                    <div style="font-weight:700;font-size:14px;">🏦 የክፍያ መረጃ</div>
+                    <div style="font-size:13px;margin-top:6px;color:#cbd5e1;">
+                        <div>📱 ተሌብር / ሲቢኢ ብር: <strong style="color:#fbbf24;">0913843534</strong></div>
+                        <div>👤 ስም: <strong style="color:#fbbf24;">Frezer Abiy</strong></div>
+                    </div>
+                </div>
+                <div class="form-group"><label>የግብይት መታወቂያ</label><input type="text" id="depositTxnId" placeholder="ቁጥሩን ያስገቡ"></div>
+                <button class="btn btn-gold" onclick="submitDeposit()">✅ አስገባ</button>
+                <button class="btn btn-outline mt-8" onclick="closeModal('depositModal')">✖ ዝጋ</button>
+            </div>
+        </div>
+
+        <div class="modal-overlay" id="withdrawModal">
+            <div class="modal-content">
+                <div class="modal-title">🏦 ገንዘብ አውጣ</div>
+                <div class="form-group"><label>መጠን (ብር)</label><input type="number" id="withdrawAmount" placeholder="መጠን ያስገቡ"></div>
+                <div class="form-group"><label>አድራሻ</label><input type="text" id="withdrawAddress" placeholder="አድራሻ ያስገቡ"></div>
+                <button class="btn btn-primary" onclick="submitWithdraw()">✅ አስገባ</button>
+                <button class="btn btn-outline mt-8" onclick="closeModal('withdrawModal')">✖ ዝጋ</button>
+            </div>
+        </div>
+
+        <!-- winning overlay -->
+        <div class="winning-overlay" id="winningOverlay">
+            <div class="win-card">
+                <div class="big" id="winAmountDisplay">0</div>
+                <div class="sub" id="winningMessage">🎉 እንኳን ደስ አለዎት!</div>
+                <button class="btn btn-gold mt-12" onclick="closeWinning()">✖ ዝጋ</button>
+            </div>
+        </div>
+
+        <div style="text-align:center; margin-top:16px; font-size:12px; color:#475569;">
+            v2.0 · production
+        </div>
+    </div>
+
+    <script>
+        // ============================================================
+        // PRODUCTION CONFIGURATION (updated)
+        // ============================================================
+        const PRODUCTION_CONFIG = {
+            API_URL: "https://m-bingo-server.onrender.com",
+            WS_URL: "wss://m-bingo-server.onrender.com/ws",
+
+            FRONTEND_URL: "https://myf-delivery.github.io/M-Bingo/",
+
+            BOT_USERNAME: "M_bingo_bot",
+            BOT_LINK: "https://t.me/M_bingo_bot",
+
+            ADMIN_IDS: ["555508978"]
+        };
+
+        const CONFIG = PRODUCTION_CONFIG;
+
+        // ============================================================
+        // STATE
+        // ============================================================
+        let ws = null;
+        let playerId = null;
+        let reconnectTimer = null;
+
+        // ============================================================
+        // WEBSOCKET
+        // ============================================================
+        function connectWebSocket() {
+            if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+
+            const wsUrl = CONFIG.WS_URL;
+            console.log('🔗 Connecting to WebSocket:', wsUrl);
+            updateConnectionStatus('connecting', 'Connecting...');
+
+            try {
+                ws = new WebSocket(wsUrl);
+
+                ws.onopen = () => {
+                    console.log('🟢 WebSocket connected');
+                    updateConnectionStatus('connected', 'Connected ✅');
+                    if (playerId) {
+                        ws.send(JSON.stringify({ type: 'auth', data: { userId: playerId } }));
+                    }
+                };
+
+                ws.onmessage = (event) => {
+                    try {
+                        const message = JSON.parse(event.data);
+                        handleServerMessage(message);
+                    } catch (e) {
+                        console.error('Error parsing message:', e);
+                    }
+                };
+
+                ws.onclose = () => {
+                    console.log('🔴 WebSocket disconnected');
+                    updateConnectionStatus('disconnected', 'Disconnected ❌');
+                    if (reconnectTimer) clearTimeout(reconnectTimer);
+                    reconnectTimer = setTimeout(connectWebSocket, 3000);
+                };
+
+                ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    updateConnectionStatus('disconnected', 'Error ❌');
+                };
+            } catch (e) {
+                console.error('Connection error:', e);
+                if (reconnectTimer) clearTimeout(reconnectTimer);
+                reconnectTimer = setTimeout(connectWebSocket, 5000);
+            }
+        }
+
+        function updateConnectionStatus(status, text) {
+            const dot = document.getElementById('statusDot');
+            const textEl = document.getElementById('statusText');
+            if (dot) dot.className = 'connection-status ' + status;
+            if (textEl) textEl.textContent = text;
+        }
+
+        function handleServerMessage(message) {
+            console.log('📩 Received:', message.type);
+            switch (message.type) {
+                case 'connected':
+                    console.log('✅ Connected to server:', message.data);
+                    break;
+                case 'authSuccess':
+                    console.log('🔐 Authenticated:', message.data);
+                    playerId = message.data.userId;
+                    document.getElementById('currentUserDisplay')?.textContent = 'Player';
+                    break;
+                case 'playerCount':
+                    document.getElementById('playerCountDisplay').textContent = message.data.count || 0;
+                    break;
+                case 'roomJoined':
+                    console.log('🏠 Joined room:', message.data);
+                    break;
+                case 'gameStart':
+                    console.log('🎮 Game started:', message.data);
+                    break;
+                case 'numberCalled':
+                    console.log('🔢 Number called:', message.data);
+                    break;
+                case 'gameEnd':
+                    console.log('🏆 Game ended:', message.data);
+                    showWinningOverlay(message.data);
+                    break;
+                default:
+                    console.log('Unknown message type:', message.type);
+            }
+        }
+
+        // ============================================================
+        // API
+        // ============================================================
+        async function apiRequest(endpoint, options = {}) {
+            const url = `${CONFIG.API_URL}${endpoint}`;
+            const defaultOptions = { headers: { 'Content-Type': 'application/json' } };
+            const mergedOptions = {
+                ...defaultOptions,
+                ...options,
+                headers: { ...defaultOptions.headers, ...(options.headers || {}) }
+            };
+            try {
+                const response = await fetch(url, mergedOptions);
+                const data = await response.json();
+                return data;
+            } catch (error) {
+                console.error('API Error:', error);
+                throw error;
+            }
+        }
+
+        // ============================================================
+        // USER
+        // ============================================================
+        async function handleRegister() {
+            const name = prompt('ስምዎን ያስገቡ:', 'Player');
+            if (!name || !name.trim()) return;
+            let telegramId = null, username = null, firstName = name.trim();
+            if (window.Telegram && window.Telegram.WebApp) {
+                const tg = window.Telegram.WebApp;
+                const user = tg.initDataUnsafe?.user;
+                if (user) {
+                    telegramId = user.id;
+                    username = user.username;
+                    firstName = user.first_name || name.trim();
+                }
+            }
+            try {
+                const result = await apiRequest('/api/users/register', {
+                    method: 'POST',
+                    body: JSON.stringify({ telegramId, username, firstName, lastName: '' })
+                });
+                if (result.success) {
+                    playerId = result.user.id;
+                    alert('✅ ተመዝግበዋል!');
+                    document.getElementById('currentUserDisplay').textContent = result.user.firstName || 'Player';
+                    if (!ws || ws.readyState !== WebSocket.OPEN) connectWebSocket();
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({ type: 'auth', data: { userId: playerId } }));
+                    }
+                    updateBalance(result.user.balance);
+                }
+            } catch (error) {
+                alert('❌ ምዝገባ አልተሳካም: ' + error.message);
+            }
+        }
+
+        function updateBalance(balance) {
+            document.getElementById('headerBalance').textContent = balance || 0;
+        }
+
+        // ============================================================
+        // GAME
+        // ============================================================
+        function showStakeSelection() {
+            document.getElementById('stakeModal').classList.add('show');
+        }
+
+        function selectStake(el) {
+            document.querySelectorAll('.stake-btn').forEach(e => e.classList.remove('active'));
+            el.classList.add('active');
+            const confirmBtn = document.getElementById('stakeConfirmBtn');
+            if (confirmBtn) confirmBtn.disabled = false;
+        }
+
+        function confirmStake() {
+            const activeBtn = document.querySelector('.stake-btn.active');
+            if (!activeBtn) {
+                alert('እባክዎን ክምችት ይምረጡ');
+                return;
+            }
+            const stake = parseInt(activeBtn.dataset.stake);
+            closeModal('stakeModal');
+            apiRequest('/api/rooms', {
+                method: 'POST',
+                body: JSON.stringify({ stake })
+            }).then(result => {
+                console.log('Room created:', result);
+                alert(`✅ ${stake} ብር ክምችት ተመርጧል! ጨዋታ ይጀምራል.`);
+                showPage('page-selection');
+                document.getElementById('selStake').textContent = stake + ' ብር';
+            }).catch(error => {
+                alert('❌ ክምችት መምረጥ አልተሳካም');
+            });
+        }
+
+        // ============================================================
+        // WINNING OVERLAY
+        // ============================================================
+        function showWinningOverlay(data) {
+            const overlay = document.getElementById('winningOverlay');
+            overlay.classList.add('show');
+            document.getElementById('winAmountDisplay').textContent = data.prize || 0;
+            document.getElementById('winningMessage').textContent =
+                data.winnerId === playerId ? '🎉 እንኳን ደስ አለዎት!' : '🏆 አሸናፊ ተገኝቷል!';
+        }
+
+        function closeWinning() {
+            document.getElementById('winningOverlay').classList.remove('show');
+        }
+
+        // ============================================================
+        // MODALS / PAGE
+        // ============================================================
+        function showModal(id) { document.getElementById(id).classList.add('show'); }
+        function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+        function showPage(pageId) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.getElementById(pageId).classList.add('active');
+        }
+
+        // ============================================================
+        // DEPOSIT / WITHDRAW
+        // ============================================================
+        function showDeposit() { showModal('depositModal'); }
+        function submitDeposit() {
+            const amount = parseInt(document.getElementById('depositAmount').value);
+            const txnId = document.getElementById('depositTxnId').value.trim();
+            if (!amount || amount < 50 || amount > 5000) {
+                alert('እባክዎን ትክክለኛ መጠን ያስገቡ (50-5000 ብር)');
+                return;
+            }
+            if (!txnId) {
+                alert('እባክዎን የግብይት መታወቂያ ያስገቡ');
+                return;
+            }
+            alert(`✅ ${amount} ብር ጥያቄ ተልኳል!\nእባክዎን የአስተዳዳሪ ማረጋገጫ ይጠብቁ.`);
+            closeModal('depositModal');
+        }
+
+        function showWithdraw() { showModal('withdrawModal'); }
+        function submitWithdraw() {
+            const amount = parseInt(document.getElementById('withdrawAmount').value);
+            const address = document.getElementById('withdrawAddress').value.trim();
+            if (!amount || amount <= 0) {
+                alert('እባክዎን ትክክለኛ መጠን ያስገቡ');
+                return;
+            }
+            if (!address) {
+                alert('እባክዎን አድራሻ ያስገቡ');
+                return;
+            }
+            alert(`✅ ${amount} ብር መውጫ ጥያቄ ተልኳል!`);
+            closeModal('withdrawModal');
+        }
+
+        // ============================================================
+        // INIT
+        // ============================================================
+        function init() {
+            console.log('🎯 M-BINGO Frontend (Production)');
+            console.log(`🔗 Backend: ${CONFIG.API_URL}`);
+            console.log(`📡 WebSocket: ${CONFIG.WS_URL}`);
+            console.log(`🤖 Bot: @${CONFIG.BOT_USERNAME}`);
+            document.getElementById('gameStatusDisplay')?.textContent('⏳ እየተጠበቀ');
+            connectWebSocket();
+            // ensure modals have correct content (already in html)
+        }
+
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
