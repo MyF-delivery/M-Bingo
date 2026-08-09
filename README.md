@@ -4,7 +4,7 @@ A real-time multiplayer BINGO game with WebSocket support. Players can join, sel
 
 ## 🌐 Live Demo
 
-- **Frontend**: https://YOUR_USERNAME.github.io/bingo-multiplayer/
+- **Frontend**: https://myf-delivery.github.io/M-Bingo/
 - **Backend**: https://bingo-server.onrender.com
 
 ## 📁 Project Structure
