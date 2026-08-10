@@ -751,7 +751,7 @@
     
     const PRODUCTION_CONFIG = {
         API_URL: 'https://m-bingo-server.onrender.com',
-        WS_URL: 'wss://m-bingo-server.onrender.com
+        WS_URL: 'wss://m-bingo-server.onrender.com', // ✅ Fixed: added closing quote and comma
         FRONTEND_URL: 'https://myf-delivery.github.io/M-Bingo/',
         BOT_USERNAME: 'M_bingo_bot',
         BOT_LINK: 'https://t.me/M_bingo_bot',
@@ -906,10 +906,15 @@ function generateBoards() {
                 } catch (e) { console.error('Parse error:', e); }
             };
             ws.onclose = () => {
-                console.log('🔴 Disconnected');
-                updateConnectionStatus('disconnected', 'Disconnected ❌');
-                setTimeout(connectWebSocket, 3000);
-            };
+    console.log('🔴 Disconnected');
+    updateConnectionStatus('disconnected', 'Disconnected ❌');
+    // Add a small delay to prevent rapid reconnection attempts
+    setTimeout(() => {
+        if (!ws || ws.readyState === WebSocket.CLOSED) {
+            connectWebSocket();
+        }
+    }, 3000);
+};
             ws.onerror = (error) => {
                 console.error('WebSocket error:', error);
                 updateConnectionStatus('disconnected', 'Error ❌');
