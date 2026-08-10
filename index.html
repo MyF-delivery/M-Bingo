@@ -751,7 +751,7 @@
     
     const PRODUCTION_CONFIG = {
         API_URL: 'https://m-bingo-server.onrender.com',
-        WS_URL: 'wss://m-bingo-server.onrender.com/ws',
+        WS_URL: 'wss://m-bingo-server.onrender.com
         FRONTEND_URL: 'https://myf-delivery.github.io/M-Bingo/',
         BOT_USERNAME: 'M_bingo_bot',
         BOT_LINK: 'https://t.me/M_bingo_bot',
@@ -788,35 +788,65 @@
     let playerStats = { gamesPlayed: 0, wins: 0, totalWinnings: 0 };
 
     // ============================================================
-    // BINGO BOARD GENERATION
-    // ============================================================
+// BINGO BOARD - LOAD FROM API
+// ============================================================
 
-    function generateBoards() {
-        const boards = [];
-        for (let b = 1; b <= 200; b++) {
-            const board = [];
-            for (let row = 0; row < 5; row++) {
-                const rowData = [];
-                for (let col = 0; col < 5; col++) {
-                    let num;
-                    if (col === 2 && row === 2) { 
-                        num = '★'; 
-                    } else {
-                        const min = col * 15 + 1;
-                        const max = (col + 1) * 15;
-                        const seed = (b * 7 + row * 13 + col * 31) % 15;
-                        num = min + seed;
-                    }
-                    rowData.push(num);
-                }
-                board.push(rowData);
+let BOARDS = [];
+
+async function loadCardsFromAPI() {
+    try {
+        console.log('📡 Loading cards from API...');
+        const response = await fetch(`${CONFIG.API_URL}/api/cards`);
+        const cards = await response.json();
+        
+        if (cards && cards.length > 0) {
+            // Convert API format to board format
+            BOARDS = cards.map(card => card.board);
+            console.log('✅ Loaded', BOARDS.length, 'cards from API');
+            
+            // If we're on the selection page, re-render
+            if (document.getElementById('page-selection').classList.contains('active')) {
+                renderCards();
             }
-            boards.push(board);
+            return true;
+        } else {
+            console.warn('⚠️ No cards from API, using generated cards');
+            BOARDS = generateBoards();
+            return false;
         }
-        return boards;
+    } catch (error) {
+        console.error('❌ Failed to load cards from API:', error);
+        console.warn('⚠️ Using generated cards as fallback');
+        BOARDS = generateBoards();
+        return false;
     }
+}
 
-    const BOARDS = generateBoards();
+// Keep generateBoards as fallback
+function generateBoards() {
+    const boards = [];
+    for (let b = 1; b <= 200; b++) {
+        const board = [];
+        for (let row = 0; row < 5; row++) {
+            const rowData = [];
+            for (let col = 0; col < 5; col++) {
+                let num;
+                if (col === 2 && row === 2) { 
+                    num = '★'; 
+                } else {
+                    const min = col * 15 + 1;
+                    const max = (col + 1) * 15;
+                    const seed = (b * 7 + row * 13 + col * 31) % 15;
+                    num = min + seed;
+                }
+                rowData.push(num);
+            }
+            board.push(rowData);
+        }
+        boards.push(board);
+    }
+    return boards;
+}
 
     // ============================================================
     // API HELPERS
@@ -1151,40 +1181,72 @@
     // ============================================================
     // RENDER CARDS
     // ============================================================
-
-    function renderCards() {
-        const container = document.getElementById('cardsContainer');
-        container.innerHTML = '';
-        const currentPlayer = players.find(p => p.id === playerId);
-        const takenCards = gameState.selectedCards || [];
-        BOARDS.forEach((board, index) => {
-            const cardNum = index + 1;
-            const isSelected = currentPlayer && currentPlayer.cards && currentPlayer.cards.includes(cardNum);
-            const isTaken = takenCards.includes(cardNum) && !isSelected;
-            const div = document.createElement('div');
-            div.className = 'card-item';
-            if (isSelected) div.classList.add('selected');
-            if (isTaken) div.classList.add('taken');
-            div.dataset.card = cardNum;
-            let ownerName = '';
-            if (isTaken) {
-                const owner = players.find(p => p.cards && p.cards.includes(cardNum));
-                if (owner) ownerName = owner.name || 'Player';
-            }
-            div.innerHTML = `<div class="card-number">#${cardNum}</div><span class="card-owner">${isTaken ? '👤 ' + ownerName : ''}</span>`;
-            if (!isTaken) div.onclick = () => toggleCardSelection(cardNum);
-            else div.onclick = () => alert(`ካርድ #${cardNum} በ ${ownerName} ተመርጧል!`);
-            container.appendChild(div);
-        });
-        const btn = document.getElementById('playGameBtn');
-        if (currentPlayer && currentPlayer.cards && currentPlayer.cards.length > 0) {
-            btn.disabled = false;
-            btn.textContent = '✅ ካርዶችን አስገባ';
-        } else {
-            btn.disabled = true;
-            btn.textContent = '🎯 ካርዶችን አስገባ';
-        }
+function renderCards() {
+    const container = document.getElementById('cardsContainer');
+    if (!container) {
+        console.error('❌ cardsContainer not found!');
+        return;
     }
+    
+    container.innerHTML = '';
+    
+    if (!BOARDS || BOARDS.length === 0) {
+        container.innerHTML = '<div style="text-align:center;padding:20px;color:#999;">⏳ Loading cards...</div>';
+        return;
+    }
+    
+    const currentPlayer = players.find(p => p.id === playerId);
+    const takenCards = gameState.selectedCards || [];
+    
+    console.log('📋 Rendering', BOARDS.length, 'cards');
+    console.log('👤 Current player:', currentPlayer?.name || 'Not registered');
+    console.log('🎴 Taken cards:', takenCards.length);
+    
+    BOARDS.forEach((board, index) => {
+        const cardNum = index + 1;
+        const isSelected = currentPlayer && currentPlayer.cards && currentPlayer.cards.includes(cardNum);
+        const isTaken = takenCards.includes(cardNum) && !isSelected;
+        
+        const div = document.createElement('div');
+        div.className = 'card-item';
+        if (isSelected) div.classList.add('selected');
+        if (isTaken) div.classList.add('taken');
+        div.dataset.card = cardNum;
+        
+        let ownerName = '';
+        if (isTaken) {
+            const owner = players.find(p => p.cards && p.cards.includes(cardNum));
+            if (owner) ownerName = owner.name || 'Player';
+        }
+        
+        div.innerHTML = `
+            <div class="card-number">#${cardNum}</div>
+            <span class="card-owner">${isTaken ? '👤 ' + ownerName : isSelected ? '✅ Selected' : '⬜ Available'}</span>
+        `;
+        
+        if (!isTaken) {
+            div.onclick = () => toggleCardSelection(cardNum);
+            div.style.cursor = 'pointer';
+        } else {
+            div.onclick = () => alert(`ካርድ #${cardNum} በ ${ownerName} ተመርጧል!`);
+            div.style.cursor = 'not-allowed';
+        }
+        
+        container.appendChild(div);
+    });
+    
+    // Update button state
+    const btn = document.getElementById('playGameBtn');
+    if (currentPlayer && currentPlayer.cards && currentPlayer.cards.length > 0) {
+        btn.disabled = false;
+        btn.textContent = '✅ ካርዶችን አስገባ';
+    } else {
+        btn.disabled = true;
+        btn.textContent = '🎯 ካርዶችን አስገባ';
+    }
+    
+    console.log('✅ Cards rendered successfully!');
+}
 
     // ============================================================
     // TOGGLE CARD SELECTION
@@ -1661,35 +1723,41 @@
     // ============================================================
 
     function init() {
-        console.log('🎯 M-BINGO Production');
-        console.log(`🔗 API: ${CONFIG.API_URL}`);
-        console.log(`📡 WebSocket: ${CONFIG.WS_URL}`);
-        console.log(`🌐 Frontend: ${CONFIG.FRONTEND_URL}`);
-        connectWebSocket();
-        updateStatsUI();
-        setupModals();
-        
-        if (window.Telegram && window.Telegram.WebApp) {
-            const tg = window.Telegram.WebApp;
-            tg.ready();
-            const user = tg.initDataUnsafe?.user;
-            if (user) {
-                console.log('✅ Telegram user:', user);
-                isTelegramUser = true;
-                document.getElementById('currentUserDisplay').textContent = user.first_name || 'Player';
-                registerUser(user.id, user.username, user.first_name, user.last_name);
-            }
+    console.log('🎯 M-BINGO Production');
+    console.log(`🔗 API: ${CONFIG.API_URL}`);
+    console.log(`📡 WebSocket: ${CONFIG.WS_URL}`);
+    console.log(`🌐 Frontend: ${CONFIG.FRONTEND_URL}`);
+    
+    // Load cards first
+    loadCardsFromAPI().then(() => {
+        console.log('✅ Cards ready, initializing...');
+    });
+    
+    connectWebSocket();
+    updateStatsUI();
+    setupModals();
+    
+    if (window.Telegram && window.Telegram.WebApp) {
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+        const user = tg.initDataUnsafe?.user;
+        if (user) {
+            console.log('✅ Telegram user:', user);
+            isTelegramUser = true;
+            document.getElementById('currentUserDisplay').textContent = user.first_name || 'Player';
+            registerUser(user.id, user.username, user.first_name, user.last_name);
         }
-        
-        document.addEventListener('visibilitychange', () => {
-            if (!document.hidden && (!ws || ws.readyState !== WebSocket.OPEN)) {
-                connectWebSocket();
-            }
-        });
-        
-        console.log('✅ M-BINGO initialized!');
-        console.log('📍 Share: https://t.me/M_bingo_bot');
     }
+    
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && (!ws || ws.readyState !== WebSocket.OPEN)) {
+            connectWebSocket();
+        }
+    });
+    
+    console.log('✅ M-BINGO initialized!');
+    console.log('📍 Share: https://t.me/M_bingo_bot');
+}
 
     document.addEventListener('DOMContentLoaded', init);
     </script>
