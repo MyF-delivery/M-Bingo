@@ -891,55 +891,67 @@ function generateBoards() {
     // ============================================================
 
     function connectWebSocket() {
-        updateConnectionStatus('connecting', 'Connecting...');
+    updateConnectionStatus('connecting', 'Connecting...');
+    
+    // Try primary URL
+    let wsUrl = SERVER_URL;
+    
+    // If SERVER_URL doesn't have /ws, try both
+    const urls = [SERVER_URL, SERVER_URL + '/ws'];
+    let currentUrlIndex = 0;
+    
+    function tryConnect() {
+        if (currentUrlIndex >= urls.length) {
+            console.error('❌ All WebSocket URLs failed');
+            updateConnectionStatus('disconnected', 'Failed ❌');
+            setTimeout(connectWebSocket, 5000);
+            return;
+        }
+        
+        const url = urls[currentUrlIndex];
+        console.log(`🔄 Trying WebSocket: ${url}`);
+        
         try {
-            ws = new WebSocket(SERVER_URL);
+            ws = new WebSocket(url);
+            
             ws.onopen = () => {
-                console.log('🟢 Connected');
+                console.log(`✅ Connected to ${url}`);
                 updateConnectionStatus('connected', 'Connected ✅');
                 if (playerId) sendToServer('auth', { userId: playerId });
             };
+            
             ws.onmessage = (event) => {
                 try {
                     const message = JSON.parse(event.data);
                     handleServerMessage(message);
                 } catch (e) { console.error('Parse error:', e); }
             };
+            
             ws.onclose = () => {
-    console.log('🔴 Disconnected');
-    updateConnectionStatus('disconnected', 'Disconnected ❌');
-    // Add a small delay to prevent rapid reconnection attempts
-    setTimeout(() => {
-        if (!ws || ws.readyState === WebSocket.CLOSED) {
-            connectWebSocket();
-        }
-    }, 3000);
-};
-            ws.onerror = (error) => {
-                console.error('WebSocket error:', error);
-                updateConnectionStatus('disconnected', 'Error ❌');
+                console.log(`🔴 Disconnected from ${url}`);
+                updateConnectionStatus('disconnected', 'Disconnected ❌');
+                setTimeout(() => {
+                    if (!ws || ws.readyState === WebSocket.CLOSED) {
+                        currentUrlIndex++;
+                        tryConnect();
+                    }
+                }, 3000);
             };
+            
+            ws.onerror = (error) => {
+                console.error(`❌ WebSocket error on ${url}:`, error);
+                ws.close();
+            };
+            
         } catch (e) {
             console.error('Connection error:', e);
-            setTimeout(connectWebSocket, 5000);
+            currentUrlIndex++;
+            tryConnect();
         }
     }
-
-    function updateConnectionStatus(status, text) {
-        const dot = document.getElementById('statusDot');
-        const textEl = document.getElementById('statusText');
-        if (dot) dot.className = 'connection-status ' + status;
-        if (textEl) textEl.textContent = text;
-    }
-
-    function sendToServer(type, data) {
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type, data }));
-        } else {
-            console.error('WebSocket not connected');
-            if (!ws || ws.readyState === WebSocket.CLOSED) connectWebSocket();
-        }
-    }
+    
+    tryConnect();
+}
 
     // ============================================================
     // HANDLE SERVER MESSAGES
