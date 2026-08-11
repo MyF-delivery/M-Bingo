@@ -85,7 +85,18 @@ wss.on('connection', (ws) => {
         if (ws.userId) clients.delete(ws.userId);
     });
 });
+// ============================================================
+// WEBSOCKET KEEP-ALIVE
+// ============================================================
 
+// Prevent WebSocket from disconnecting on Render free tier
+setInterval(() => {
+    wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+            client.ping();
+        }
+    });
+}, 25000); // Ping every 25 seconds
 // ============================================================
 // HEALTH CHECK
 // ============================================================
