@@ -1203,46 +1203,23 @@ function updateBalance(balance) {
 }
 
     // ============================================================
-    // UPDATE UI
-    // ============================================================
-play').textContent = players.length || 0;
-        document.getElementById('currentUserDisplay').textContent = currentPlayer?.name || 'Not registered';
-        const totalCards = players.reduce((sum, p) => sum + (p.cards ? p.cards.length : 0), 0);
-        document.getElementById('totalCardsDisplay').textContent = totalCards;
-        const status = document.getElementById('gameStatusDisplay');
-        if (gameState.status === 'playing') status.textContent = '🔴 በጨዋታ ላይ';
-        else if (gameState.status === 'selecting') status.textContent = '🔄 ካርድ በመምረጥ ላይ...';
-        else if (gameState.status === 'ended') status.textContent = '🏆 ጨዋታ አልቋል';
-        else if (ws && ws.readyState === WebSocket.OPEN) status.textContent = '⏳ እየተጠበቀ';
-        else status.textContent = '❌ ግንኙነት የለም';
-    }
+// UPDATE UI
+// ============================================================
 
-    function updateStatsUI() {
-        document.getElementById('gamesPlayed').textContent = playerStats.gamesPlayed || 0;
-        document.getElementById('winsCount').textContent = playerStats.wins || 0;
-        document.getElementById('totalWinnings').textContent = formatMoney(playerStats.totalWinnings || 0) + ' ብር';
-        const winRate = playerStats.gamesPlayed > 0 ? Math.round((playerStats.wins / playerStats.gamesPlayed) * 100) : 0;
-        document.getElementById('winRate').textContent = winRate + '%';
-    }
-
-    function updateSelectionUI() {
-        document.getElementById('selStake').textContent = gameState.stake + ' ብር';
-        document.getElementById('selGameNum').textContent = '#' + (gameState.gameNumber + 1);
-        const currentPlayer = players.find(p => p.id === playerId);
-        if (currentPlayer) {
-            document.getElementById('selCount').textContent = currentPlayer.cards ? currentPlayer.cards.length : 0;
-            document.getElementById('selStatus').textContent = `${currentPlayer.cards ? currentPlayer.cards.length : 0}/5 ተመርጧል`;
-        }
-        document.getElementById('globalSelCount').textContent = (gameState.selectedCards || []).length + ' ካርዶች';
-        updateSelectionTimer();
-    }
-
-    function updateSelectionTimer() {
-        const timerEl = document.getElementById('selTimer');
-        timerEl.textContent = gameState.selectionTimeLeft || 0;
-        if (gameState.selectionTimeLeft <= 10) timerEl.classList.add('warning');
-        else timerEl.classList.remove('warning');
-    }
+function updatePlayerUI() {
+    const currentPlayer = players.find(p => p.id === playerId);
+    document.getElementById('headerBalance').textContent = formatMoney(currentPlayer?.balance || 0);
+    document.getElementById('playerCountDisplay').textContent = players.length || 0;
+    document.getElementById('currentUserDisplay').textContent = currentPlayer?.name || 'Not registered';
+    const totalCards = players.reduce((sum, p) => sum + (p.cards ? p.cards.length : 0), 0);
+    document.getElementById('totalCardsDisplay').textContent = totalCards;
+    const status = document.getElementById('gameStatusDisplay');
+    if (gameState.status === 'playing') status.textContent = '🔴 በጨዋታ ላይ';
+    else if (gameState.status === 'selecting') status.textContent = '🔄 ካርድ በመምረጥ ላይ...';
+    else if (gameState.status === 'ended') status.textContent = '🏆 ጨዋታ አልቋል';
+    else if (ws && ws.readyState === WebSocket.OPEN) status.textContent = '⏳ እየተጠበቀ';
+    else status.textContent = '❌ ግንኙነት የለም';
+}
 
     // ============================================================
     // RENDER CARDS
