@@ -1163,19 +1163,111 @@
         alert('❌ Registration error: ' + error.message);
     });
 }
+Bingo backend down
+✅ Your registerUser Function is Correct!
+I can see your registerUser function is already updated with the fix. The issue is that you're missing the handleRegister() function that calls it when you click the "መመዝገብ" button.
 
-    function updateBalance(balance) {
-        document.getElementById('headerBalance').textContent = balance || 0;
+🔧 Add This Missing Function
+Your HTML has this button:
+
+html
+<div class="menu-item" onclick="handleRegister()">
+But the handleRegister() function doesn't exist! Add it right after your registerUser function:
+
+
+// ============================================================
+// REGISTER USER
+// ============================================================
+
+function registerUser(telegramId, username, firstName, lastName) {
+    const name = firstName || prompt('ስምዎን ያስገቡ:', 'Player');
+    if (!name) return;
+    
+    console.log('📝 Attempting to register:', name);
+    
+    // Use a unique ID for testing
+    const testId = telegramId || Date.now();
+    
+    apiRequest('/api/users/register', {
+        method: 'POST',
+        body: JSON.stringify({
+            telegramId: testId,
+            username: username || '',
+            firstName: name.trim(),
+            lastName: lastName || ''
+        })
+    }).then(result => {
+        console.log('📝 Registration response:', result);
+        
+        // ✅ CRITICAL FIX: Check if registration was successful
+        if (result.success && result.user) {
+            // Set the playerId from the response
+            playerId = result.user.id;
+            console.log('✅ Player ID set:', playerId);
+            
+            // Update UI with user info
+            document.getElementById('currentUserDisplay').textContent = result.user.first_name || 'Player';
+            updateBalance(result.user.balance || 500);
+            
+            // Authenticate with WebSocket
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                connectWebSocket();
+            } else {
+                sendToServer('auth', { userId: playerId });
+            }
+            
+            alert(`✅ ተመዝግበዋል! (${result.user.first_name})`);
+            
+            // ✅ Important: Re-render cards to show selection
+            renderCards();
+            updatePlayerUI();
+        } else {
+            console.error('❌ Registration failed:', result);
+            alert('❌ Registration failed: ' + (result.error || 'Unknown error'));
+        }
+    }).catch(error => {
+        console.error('❌ Registration error:', error);
+        alert('❌ Registration error: ' + error.message);
+    });
+}
+
+// ============================================================
+// HANDLE REGISTER BUTTON
+// ============================================================
+
+function handleRegister() {
+    const name = prompt('ስምዎን ያስገቡ:', 'Player');
+    if (name && name.trim()) {
+        let telegramId = null;
+        let username = null;
+        
+        // Check if Telegram is available
+        if (window.Telegram && window.Telegram.WebApp) {
+            const user = window.Telegram.WebApp.initDataUnsafe?.user;
+            if (user) {
+                telegramId = user.id;
+                username = user.username;
+            }
+        }
+        
+        registerUser(telegramId, username, name.trim(), '');
+    } else {
+        alert('⚠️ እባክዎን ስም ያስገቡ!');
     }
+}
+
+// ============================================================
+// UPDATE BALANCE
+// ============================================================
+
+function updateBalance(balance) {
+    document.getElementById('headerBalance').textContent = balance || 0;
+}
 
     // ============================================================
     // UPDATE UI
     // ============================================================
-
-    function updatePlayerUI() {
-        const currentPlayer = players.find(p => p.id === playerId);
-        document.getElementById('headerBalance').textContent = formatMoney(currentPlayer?.balance || 0);
-        document.getElementById('playerCountDisplay').textContent = players.length || 0;
+play').textContent = players.length || 0;
         document.getElementById('currentUserDisplay').textContent = currentPlayer?.name || 'Not registered';
         const totalCards = players.reduce((sum, p) => sum + (p.cards ? p.cards.length : 0), 0);
         document.getElementById('totalCardsDisplay').textContent = totalCards;
