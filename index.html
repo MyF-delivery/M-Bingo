@@ -1112,69 +1112,7 @@
         }
     }
 
-    // ============================================================
-    // REGISTER USER
-    // ============================================================
-
-    function registerUser(telegramId, username, firstName, lastName) {
-    function registerUser(telegramId, username, firstName, lastName) {
-    const name = firstName || prompt('ስምዎን ያስገቡ:', 'Player');
-    if (!name) return;
-    
-    console.log('📝 Registering user:', name);
-    
-    // Use a unique ID for testing
-    const testId = telegramId || Date.now();
-    
-    apiRequest('/api/users/register', {
-        method: 'POST',
-        body: JSON.stringify({
-            telegramId: testId,
-            username: username || '',
-            firstName: name.trim(),
-            lastName: lastName || ''
-        })
-    }).then(result => {
-        console.log('📝 Registration response:', result);
-        
-        if (result.success) {
-            playerId = result.user.id;
-            console.log('✅ Player ID set:', playerId);
-            
-            document.getElementById('currentUserDisplay').textContent = result.user.firstName || 'Player';
-            updateBalance(result.user.balance || 500);
-            
-            // Connect WebSocket if needed
-            if (!ws || ws.readyState !== WebSocket.OPEN) {
-                connectWebSocket();
-            } else {
-                sendToServer('auth', { userId: playerId });
-            }
-            
-            alert('✅ ተመዝግበዋል!');
-            renderCards();
-            updatePlayerUI();
-        } else {
-            console.error('❌ Registration failed:', result);
-            alert('❌ Registration failed: ' + (result.error || 'Unknown error'));
-        }
-    }).catch(error => {
-        console.error('❌ Registration error:', error);
-        alert('❌ Registration error: ' + error.message);
-    });
-}
-Bingo backend down
-✅ Your registerUser Function is Correct!
-I can see your registerUser function is already updated with the fix. The issue is that you're missing the handleRegister() function that calls it when you click the "መመዝገብ" button.
-
-🔧 Add This Missing Function
-Your HTML has this button:
-
-html
-<div class="menu-item" onclick="handleRegister()">
-But the handleRegister() function doesn't exist! Add it right after your registerUser function:
-
-
+   
 // ============================================================
 // REGISTER USER
 // ============================================================
