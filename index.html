@@ -1117,47 +1117,52 @@
     // ============================================================
 
     function registerUser(telegramId, username, firstName, lastName) {
-        const name = firstName || prompt('ስምዎን ያስገቡ:', 'Player');
-        if (!name) return;
+    function registerUser(telegramId, username, firstName, lastName) {
+    const name = firstName || prompt('ስምዎን ያስገቡ:', 'Player');
+    if (!name) return;
+    
+    console.log('📝 Registering user:', name);
+    
+    // Use a unique ID for testing
+    const testId = telegramId || Date.now();
+    
+    apiRequest('/api/users/register', {
+        method: 'POST',
+        body: JSON.stringify({
+            telegramId: testId,
+            username: username || '',
+            firstName: name.trim(),
+            lastName: lastName || ''
+        })
+    }).then(result => {
+        console.log('📝 Registration response:', result);
         
-        apiRequest('/api/users/register', {
-            method: 'POST',
-            body: JSON.stringify({
-                telegramId: telegramId || null,
-                username: username || '',
-                firstName: name.trim(),
-                lastName: lastName || ''
-            })
-        }).then(result => {
-            if (result.success) {
-                playerId = result.user.id;
-                document.getElementById('currentUserDisplay').textContent = result.user.firstName || 'Player';
-                updateBalance(result.user.balance || 500);
-                if (!ws || ws.readyState !== WebSocket.OPEN) {
-                    connectWebSocket();
-                } else {
-                    sendToServer('auth', { userId: playerId });
-                }
-                alert('✅ ተመዝግበዋል!');
-                renderCards();
+        if (result.success) {
+            playerId = result.user.id;
+            console.log('✅ Player ID set:', playerId);
+            
+            document.getElementById('currentUserDisplay').textContent = result.user.firstName || 'Player';
+            updateBalance(result.user.balance || 500);
+            
+            // Connect WebSocket if needed
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                connectWebSocket();
+            } else {
+                sendToServer('auth', { userId: playerId });
             }
-        }).catch(() => {
-            sendToServer('register', { name: name.trim(), telegramId: telegramId || null });
+            
             alert('✅ ተመዝግበዋል!');
-        });
-    }
-
-    function handleRegister() {
-        const name = prompt('ስምዎን ያስገቡ:', 'Player');
-        if (name && name.trim()) {
-            let telegramId = null, username = null;
-            if (window.Telegram && window.Telegram.WebApp) {
-                const user = window.Telegram.WebApp.initDataUnsafe?.user;
-                if (user) { telegramId = user.id; username = user.username; }
-            }
-            registerUser(telegramId, username, name.trim(), '');
+            renderCards();
+            updatePlayerUI();
+        } else {
+            console.error('❌ Registration failed:', result);
+            alert('❌ Registration failed: ' + (result.error || 'Unknown error'));
         }
-    }
+    }).catch(error => {
+        console.error('❌ Registration error:', error);
+        alert('❌ Registration error: ' + error.message);
+    });
+}
 
     function updateBalance(balance) {
         document.getElementById('headerBalance').textContent = balance || 0;
