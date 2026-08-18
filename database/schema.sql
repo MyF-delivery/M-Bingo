@@ -1,5 +1,5 @@
 -- ============================================================
--- M-BINGO COMPLETE DATABASE - PRODUCTION READY (MERGED V2)
+-- M-BINGO COMPLETE DATABASE - PRODUCTION READY (FINAL)
 -- ============================================================
 -- This file contains:
 -- 1. Database Schema (all tables, indexes, triggers)
@@ -8,17 +8,15 @@
 -- 4. Admin Setup for Telegram ID 555508978
 -- ============================================================
 
--- ============================================================
--- PART 1: DATABASE SCHEMA
--- ============================================================
-
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- ============================================================
--- USERS
+-- PART 1: DATABASE SCHEMA
 -- ============================================================
-CREATE TABLE users (
+
+-- USERS
+CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     telegram_id BIGINT UNIQUE NOT NULL,
     username VARCHAR(100),
@@ -26,7 +24,8 @@ CREATE TABLE users (
     last_name VARCHAR(100),
     photo_url TEXT,
     balance DECIMAL(12, 2) DEFAULT 0.00,
-    locked_balance DECIMAL(12, 2) DEFAULT 0.00, -- <-- SECURITY UPGRADE ADDED HERE
+    locked_balance DECIMAL(12, 2) DEFAULT 0.00,
+    withdrawal_reserved DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
     referral_code VARCHAR(20) UNIQUE,
     referred_by UUID REFERENCES users(id),
     status VARCHAR(20) DEFAULT 'ACTIVE',
@@ -36,12 +35,13 @@ CREATE TABLE users (
     total_winnings DECIMAL(12, 2) DEFAULT 0.00,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_login TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT users_balance_nonnegative CHECK (balance >= 0),
+    CONSTRAINT users_locked_nonnegative CHECK (locked_balance >= 0),
+    CONSTRAINT users_withdrawal_reserved_nonnegative CHECK (withdrawal_reserved >= 0)
 );
 
--- ============================================================
 -- WALLET TRANSACTIONS (Immutable Ledger)
--- ============================================================
 CREATE TABLE IF NOT EXISTS wallet_transactions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id),
@@ -53,13 +53,10 @@ CREATE TABLE IF NOT EXISTS wallet_transactions (
     reference_id UUID,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX IF NOT EXISTS idx_wallet_user_id ON wallet_transactions(user_id);
 
-CREATE INDEX idx_wallet_user_id ON wallet_transactions(user_id);
-
--- ============================================================
 -- DEPOSITS
--- ============================================================
-CREATE TABLE deposits (
+CREATE TABLE IF NOT EXISTS deposits (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id),
     amount DECIMAL(12, 2) NOT NULL,
@@ -74,14 +71,11 @@ CREATE TABLE deposits (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX IF NOT EXISTS idx_deposits_user_id ON deposits(user_id);
+CREATE INDEX IF NOT EXISTS idx_deposits_status ON deposits(status);
 
-CREATE INDEX idx_deposits_user_id ON deposits(user_id);
-CREATE INDEX idx_deposits_status ON deposits(status);
-
--- ============================================================
 -- WITHDRAWALS
--- ============================================================
-CREATE TABLE withdrawals (
+CREATE TABLE IF NOT EXISTS withdrawals (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id),
     amount DECIMAL(12, 2) NOT NULL,
@@ -97,14 +91,12 @@ CREATE TABLE withdrawals (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX IF NOT EXISTS idx_withdrawals_user_id ON withdrawals(user_id);
+CREATE INDEX IF NOT EXISTS idx_withdrawals_status ON withdrawals(status);
+CREATE INDEX IF NOT EXISTS idx_withdrawals_created_at ON withdrawals(created_at DESC);
 
-CREATE INDEX idx_withdrawals_user_id ON withdrawals(user_id);
-CREATE INDEX idx_withdrawals_status ON withdrawals(status);
-
--- ============================================================
 -- BINGO CARDS
--- ============================================================
-CREATE TABLE bingo_cards (
+CREATE TABLE IF NOT EXISTS bingo_cards (
     id SERIAL PRIMARY KEY,
     card_number INTEGER UNIQUE NOT NULL,
     board JSONB NOT NULL,
@@ -112,18 +104,16 @@ CREATE TABLE bingo_cards (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- ============================================================
 -- GAME ROOMS (With State Machine & Sequence)
--- ============================================================
-CREATE TABLE rooms (
+CREATE TABLE IF NOT EXISTS rooms (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     stake DECIMAL(10, 2) NOT NULL,
     max_players INTEGER DEFAULT 100,
     min_players INTEGER DEFAULT 2,
     status VARCHAR(20) DEFAULT 'WAITING',
-    state VARCHAR(20) DEFAULT 'WAITING', -- <-- GAME ENGINE UPGRADE ADDED HERE
-    number_sequence JSONB DEFAULT '[]'::JSONB, -- <-- GAME ENGINE UPGRADE ADDED HERE
-    current_call_index INT DEFAULT 0, -- <-- GAME ENGINE UPGRADE ADDED HERE
+    state VARCHAR(20) DEFAULT 'WAITING',
+    number_sequence JSONB DEFAULT '[]'::JSONB,
+    current_call_index INT DEFAULT 0,
     countdown_seconds INTEGER DEFAULT 30,
     calling_interval_ms INTEGER DEFAULT 5000,
     house_commission DECIMAL(5, 2) DEFAULT 30.00,
@@ -136,13 +126,11 @@ CREATE TABLE rooms (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX IF NOT EXISTS idx_rooms_status ON rooms(status);
+CREATE INDEX IF NOT EXISTS idx_rooms_matchmaking ON rooms(stake,state,status,created_at);
 
-CREATE INDEX idx_rooms_status ON rooms(status);
-
--- ============================================================
 -- ROOM PLAYERS
--- ============================================================
-CREATE TABLE room_players (
+CREATE TABLE IF NOT EXISTS room_players (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES users(id),
@@ -154,14 +142,12 @@ CREATE TABLE room_players (
     left_at TIMESTAMP,
     UNIQUE(room_id, user_id)
 );
+CREATE INDEX IF NOT EXISTS idx_room_players_room_id ON room_players(room_id);
+CREATE INDEX IF NOT EXISTS idx_room_players_user_id ON room_players(user_id);
+CREATE INDEX IF NOT EXISTS idx_room_players_active ON room_players(room_id,user_id) WHERE left_at IS NULL;
 
-CREATE INDEX idx_room_players_room_id ON room_players(room_id);
-CREATE INDEX idx_room_players_user_id ON room_players(user_id);
-
--- ============================================================
 -- GAME HISTORY
--- ============================================================
-CREATE TABLE game_history (
+CREATE TABLE IF NOT EXISTS game_history (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     room_id UUID NOT NULL REFERENCES rooms(id),
     game_number INTEGER NOT NULL,
@@ -179,13 +165,10 @@ CREATE TABLE game_history (
     ended_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX IF NOT EXISTS idx_game_history_room_id ON game_history(room_id);
+CREATE INDEX IF NOT EXISTS idx_game_history_winner_id ON game_history(winner_id);
 
-CREATE INDEX idx_game_history_room_id ON game_history(room_id);
-CREATE INDEX idx_game_history_winner_id ON game_history(winner_id);
-
--- ============================================================
 -- GAME WINNERS (Server-side validation storage)
--- ============================================================
 CREATE TABLE IF NOT EXISTS game_winners (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     room_id UUID NOT NULL REFERENCES rooms(id),
@@ -195,12 +178,10 @@ CREATE TABLE IF NOT EXISTS game_winners (
     prize DECIMAL(12, 2) NOT NULL,
     verified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX idx_game_winners_room ON game_winners(room_id);
+CREATE INDEX IF NOT EXISTS idx_game_winners_room ON game_winners(room_id);
 
--- ============================================================
 -- ADMIN LOGS
--- ============================================================
-CREATE TABLE admin_logs (
+CREATE TABLE IF NOT EXISTS admin_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     admin_id UUID NOT NULL REFERENCES users(id),
     action VARCHAR(100) NOT NULL,
@@ -211,14 +192,11 @@ CREATE TABLE admin_logs (
     user_agent TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX IF NOT EXISTS idx_admin_logs_admin_id ON admin_logs(admin_id);
+CREATE INDEX IF NOT EXISTS idx_admin_logs_created_at ON admin_logs(created_at);
 
-CREATE INDEX idx_admin_logs_admin_id ON admin_logs(admin_id);
-CREATE INDEX idx_admin_logs_created_at ON admin_logs(created_at);
-
--- ============================================================
 -- REFERRALS
--- ============================================================
-CREATE TABLE referrals (
+CREATE TABLE IF NOT EXISTS referrals (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     referrer_id UUID NOT NULL REFERENCES users(id),
     referred_id UUID NOT NULL REFERENCES users(id),
@@ -228,14 +206,11 @@ CREATE TABLE referrals (
     paid_at TIMESTAMP,
     UNIQUE(referrer_id, referred_id)
 );
+CREATE INDEX IF NOT EXISTS idx_referrals_referrer_id ON referrals(referrer_id);
+CREATE INDEX IF NOT EXISTS idx_referrals_referred_id ON referrals(referred_id);
 
-CREATE INDEX idx_referrals_referrer_id ON referrals(referrer_id);
-CREATE INDEX idx_referrals_referred_id ON referrals(referred_id);
-
--- ============================================================
 -- NOTIFICATIONS
--- ============================================================
-CREATE TABLE notifications (
+CREATE TABLE IF NOT EXISTS notifications (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id),
     type VARCHAR(50) NOT NULL,
@@ -246,13 +221,10 @@ CREATE TABLE notifications (
     read_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read);
 
-CREATE INDEX idx_notifications_user_id ON notifications(user_id);
-CREATE INDEX idx_notifications_is_read ON notifications(is_read);
-
--- ============================================================
 -- TRIGGERS
--- ============================================================
 CREATE OR REPLACE FUNCTION update_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -261,15 +233,32 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS update_users_updated_at ON users;
 CREATE TRIGGER update_users_updated_at
     BEFORE UPDATE ON users
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at();
 
+DROP TRIGGER IF EXISTS update_rooms_updated_at ON rooms;
 CREATE TRIGGER update_rooms_updated_at
     BEFORE UPDATE ON rooms
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at();
+
+DROP TRIGGER IF EXISTS update_deposits_updated_at ON deposits;
+CREATE TRIGGER update_deposits_updated_at
+    BEFORE UPDATE ON deposits FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+DROP TRIGGER IF EXISTS update_withdrawals_updated_at ON withdrawals;
+CREATE TRIGGER update_withdrawals_updated_at
+    BEFORE UPDATE ON withdrawals FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+-- ============================================================
+-- COMPATIBILITY MIGRATIONS
+-- ============================================================
+ALTER TABLE users ADD COLUMN IF NOT EXISTS withdrawal_reserved DECIMAL(12,2) NOT NULL DEFAULT 0.00;
+CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id);
+CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);
 
 -- ============================================================
 -- PART 2: ALL 200 VALIDATED BINGO CARDS
