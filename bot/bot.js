@@ -587,3 +587,12 @@ bot.setChatMenuButton({
 }).catch(() => {});
 
 console.log('✅ M-BINGO Bot is running!');
+// Add this to the bottom of bot.js
+
+bot.on('error', (error) => {
+    console.error('❗ BOT ERROR:', error.message || error);
+});
+
+bot.on('polling_error', (error) => {
+    console.error('❗ POLLING ERROR:', error.message || error);
+});
