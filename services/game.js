@@ -1,5 +1,5 @@
 // services/game.js
-const { pool } = require('../app');
+const pool = require('../db'); // <-- changed
 const config = require('../config/env');
 const wallet = require('./wallet');
 
