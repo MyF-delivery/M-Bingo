@@ -367,6 +367,12 @@ bot.on('message', async (msg) => {
 notification.startNotificationPoller(bot);
 
 // ---------- Start the bot (no HTTP server) ----------
+
+const express = require('express');
+const app = express();
+app.get('/', (req, res) => res.send('Bot is running'));
+const port = process.env.PORT || 10000;
+app.listen(port, () => console.log(`Health check server on port ${port}`));
 console.log('✅ M-BINGO Bot is running (polling only)');
 
 bot.setChatMenuButton({
