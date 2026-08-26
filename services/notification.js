@@ -1,5 +1,5 @@
 // services/notification.js
-const { pool } = require('../app');
+const pool = require('../db'); // <-- changed
 const config = require('../config/env');
 
 async function sendAdminNotification(text) {
