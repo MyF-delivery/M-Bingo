@@ -1,5 +1,5 @@
 // services/notification.js
-const pool = require('../db'); // <-- changed
+const pool = require('../db');  // <-- this line replaces any local pool creation
 const config = require('../config/env');
 
 async function sendAdminNotification(text) {
