@@ -1,5 +1,5 @@
 // services/wallet.js
-const { pool } = require('../app'); // We'll export pool from app.js later
+const pool = require('../db'); // <-- changed
 const config = require('../config/env');
 
 async function addLedger(client, userId, type, amount, before, after, referenceType = null, referenceId = null) {
