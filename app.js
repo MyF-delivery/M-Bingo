@@ -20,16 +20,7 @@ app.disable('x-powered-by');
 if (process.env.TRUST_PROXY === 'true') app.set('trust proxy', 1);
 const server = http.createServer(app);
 
-const pool = new Pool({
-  host: config.DB_HOST,
-  port: config.DB_PORT,
-  database: config.DB_NAME,
-  user: config.DB_USER,
-  password: config.DB_PASSWORD,
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000,
-});
+const pool = require('./db');
 
 // Make pool globally available for services
 global.pool = pool;
