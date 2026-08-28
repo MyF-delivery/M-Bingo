@@ -2814,8 +2814,125 @@
         
         console.log('✅ M-BINGO initialized!');
         console.log('📍 Share: https://t.me/M_bingo_bot');
+    } 
+        
+// ============================================================
+// MOBILE CONSOLE DEBUGGER – shows logs on screen
+// ============================================================
+
+(function() {
+    // Create a container for the console output
+    const consoleDiv = document.createElement('div');
+    consoleDiv.id = 'mobileConsole';
+    consoleDiv.style.cssText = `
+        position: fixed;
+        bottom: 60px;
+        left: 0;
+        right: 0;
+        max-height: 150px;
+        overflow-y: auto;
+        background: rgba(0,0,0,0.85);
+        color: #0f0;
+        font-family: monospace;
+        font-size: 12px;
+        padding: 8px 12px;
+        z-index: 9999;
+        border-top: 2px solid #f00;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        display: none; /* hidden by default, show with a gesture or button */
+        pointer-events: auto;
+    `;
+    document.body.appendChild(consoleDiv);
+
+    // Toggle visibility with a double-tap on the header (or any other trigger)
+    let visible = false;
+    const toggleConsole = () => {
+        visible = !visible;
+        consoleDiv.style.display = visible ? 'block' : 'none';
+    };
+
+    // Add a small toggle button at the top-right corner of the screen
+    const toggleBtn = document.createElement('div');
+    toggleBtn.textContent = '📋';
+    toggleBtn.style.cssText = `
+        position: fixed;
+        top: 60px;
+        right: 10px;
+        background: rgba(0,0,0,0.7);
+        color: #fff;
+        padding: 6px 12px;
+        border-radius: 20px;
+        font-size: 18px;
+        z-index: 10000;
+        cursor: pointer;
+        border: 1px solid #666;
+        user-select: none;
+    `;
+    toggleBtn.addEventListener('click', toggleConsole);
+    document.body.appendChild(toggleBtn);
+
+    // Override console methods to write to the div
+    const originalLog = console.log;
+    const originalError = console.error;
+    const originalWarn = console.warn;
+
+    function writeToConsole(message, type = 'log') {
+        const colors = {
+            log: '#0f0',
+            error: '#f44',
+            warn: '#ff0'
+        };
+        const entry = document.createElement('div');
+        entry.style.color = colors[type] || '#fff';
+        entry.textContent = `[${type.toUpperCase()}] ${message}`;
+        consoleDiv.appendChild(entry);
+        consoleDiv.scrollTop = consoleDiv.scrollHeight;
+        // Keep only last 50 lines to avoid overflow
+        while (consoleDiv.children.length > 50) {
+            consoleDiv.removeChild(consoleDiv.firstChild);
+        }
     }
 
+    console.log = function(...args) {
+        originalLog.apply(console, args);
+        writeToConsole(args.join(' '), 'log');
+    };
+    console.error = function(...args) {
+        originalError.apply(console, args);
+        writeToConsole(args.join(' '), 'error');
+    };
+    console.warn = function(...args) {
+        originalWarn.apply(console, args);
+        writeToConsole(args.join(' '), 'warn');
+    };
+
+    // Also catch uncaught errors
+    window.addEventListener('error', function(e) {
+        writeToConsole(`Uncaught: ${e.message} (${e.filename}:${e.lineno})`, 'error');
+    });
+
+    // Show WebSocket connection attempts
+    const originalWebSocket = window.WebSocket;
+    window.WebSocket = function(...args) {
+        const ws = new originalWebSocket(...args);
+        const url = args[0];
+        writeToConsole(`WebSocket connecting to ${url}`, 'log');
+        ws.addEventListener('open', () => {
+            writeToConsole(`WebSocket connected to ${url}`, 'log');
+        });
+        ws.addEventListener('error', (err) => {
+            writeToConsole(`WebSocket error: ${err.message || 'connection failed'}`, 'error');
+        });
+        ws.addEventListener('close', (e) => {
+            writeToConsole(`WebSocket closed (code: ${e.code}, reason: ${e.reason})`, 'warn');
+        });
+        return ws;
+    };
+
+    // Initial message
+    writeToConsole('Mobile console active. Tap 📋 to toggle.', 'log');
+})();
     document.addEventListener('DOMContentLoaded', init);
     </script>
 
