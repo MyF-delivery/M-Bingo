@@ -1540,24 +1540,29 @@
                 updateStatsUI();
                 break;
             case 'numberCalled':
-                // **FIXED: Safety checks for data updates**
-                gameState.calledNumbers = message.data.calledNumbers || gameState.calledNumbers || [];
-                gameState.calledCount = message.data.calledCount || gameState.calledCount || 0;
-                const number = message.data.number;
-                
-                // If currentGameCards is empty (server sometimes doesn't send them on restart), try to find them
-                if (!currentGameCards.length && message.data.cards) currentGameCards = message.data.cards;
-                
-                currentGameCards.forEach(card => {
-                    if (!card.marked) card.marked = Array(5).fill().map(() => Array(5).fill(false));
-                    for (let r = 0; r < 5; r++) {
-                        for (let c = 0; c < 5; c++) {
-                            if (card.board[r][c] === number) card.marked[r][c] = true;
-                        }
-                    }
-                });
-                updateGameUI();
-                break;
+    // Update called numbers and count
+    gameState.calledNumbers = message.data.calledNumbers || gameState.calledNumbers || [];
+    gameState.calledCount = message.data.calledCount || gameState.calledCount || 0;
+
+    // ** FIX: If the server sent updated cards, replace the entire list! **
+    // This ensures the green marks show up no matter what.
+    if (message.data.cards) {
+        currentGameCards = message.data.cards;
+    } else if (currentGameCards.length > 0) {
+        // Fallback: manually mark based on number if cards weren't sent
+        const number = message.data.number;
+        currentGameCards.forEach(card => {
+            if (!card.marked) card.marked = Array(5).fill().map(() => Array(5).fill(false));
+            for (let r = 0; r < 5; r++) {
+                for (let c = 0; c < 5; c++) {
+                    if (card.board[r][c] === number) card.marked[r][c] = true;
+                }
+            }
+        });
+    }
+
+    updateGameUI();
+    break;
             case 'gameEnd':
                 gameState.isPlaying = false;
                 gameState.status = 'ended';
