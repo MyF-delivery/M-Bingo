@@ -1,0 +1,25 @@
+name: Keep Services Awake
+
+on:
+  schedule:
+    # Runs every 10 minutes
+    - cron: '*/10 * * * *'
+  # Allows you to run it manually right now from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  keep-alive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping Backend API
+        run: |
+          curl -s -o /dev/null -w "%{http_code}" https://m-bingo-backend.onrender.com/health || true
+          
+      - name: Ping Bot Service
+        run: |
+          curl -s -o /dev/null -w "%{http_code}" https://m-bingo-bot.onrender.com/ || true
+          
+      - name: Ping Frontend
+        run: |
+          curl -s -o /dev/null -w "%{http_code}" https://myf-delivery.github.io/M-Bingo/ || true
