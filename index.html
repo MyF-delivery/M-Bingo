@@ -1,0 +1,2809 @@
+<!DOCTYPE html>
+<html lang="am">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ማታኒ ቢንጎ · Multiplayer</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Ethiopic:wght@400;700;900&display=swap');
+        :root {
+            --primary: #8B0000;
+            --primary-dark: #5C0000;
+            --gold: #FFD700;
+            --gold-dark: #B8860B;
+            --white: #FFFFFF;
+            --light-bg: #FFF8F0;
+            --card-bg: #F5E6D3;
+            --green: #2E7D32;
+            --red: #C62828;
+            --shadow: 0 4px 20px rgba(0,0,0,0.15);
+        }
+        body {
+            font-family: 'Noto Sans Ethiopic', 'Segoe UI', sans-serif;
+            background: var(--light-bg);
+            color: #333;
+            min-height: 100vh;
+            overflow-x: hidden;
+            padding-bottom: 80px;
+        }
+        .header {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: var(--white);
+            padding: 16px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 2px 15px rgba(139,0,0,0.3);
+        }
+        .header-title { font-size: 22px; font-weight: 900; display: flex; align-items: center; gap: 8px; }
+        .header-title .icon { font-size: 28px; }
+        .header-balance {
+            background: rgba(255,255,255,0.2);
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 16px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+        }
+        .header-balance .amount { color: var(--gold); }
+        .page { display: none; padding: 16px; animation: fadeIn 0.3s ease; }
+        .page.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .menu-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            padding: 10px 0;
+        }
+        .menu-item {
+            background: var(--white);
+            border-radius: 16px;
+            padding: 20px 10px;
+            text-align: center;
+            box-shadow: var(--shadow);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 2px solid transparent;
+        }
+        .menu-item:active { transform: scale(0.95); border-color: var(--gold); }
+        .menu-item .icon { font-size: 32px; display: block; margin-bottom: 8px; }
+        .menu-item .label { font-size: 13px; font-weight: 700; color: #333; }
+        .menu-item .sub-label { font-size: 11px; color: #888; margin-top: 2px; }
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: var(--white);
+            display: flex;
+            justify-content: space-around;
+            padding: 8px 0 12px;
+            box-shadow: 0 -2px 20px rgba(0,0,0,0.1);
+            z-index: 200;
+            border-top: 2px solid var(--gold);
+        }
+        .nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-size: 10px;
+            color: #999;
+            cursor: pointer;
+            padding: 4px 12px;
+            border-radius: 12px;
+            transition: all 0.2s;
+            background: transparent;
+            border: none;
+        }
+        .nav-item .nav-icon { font-size: 22px; margin-bottom: 2px; }
+        .nav-item.active { color: var(--primary); font-weight: 700; }
+        .nav-item.active .nav-icon { color: var(--gold); }
+        .selection-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--white);
+            padding: 12px 16px;
+            border-radius: 12px;
+            margin-bottom: 12px;
+            box-shadow: var(--shadow);
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .selection-header .info-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-size: 11px;
+            color: #888;
+        }
+        .selection-header .info-item .value { font-size: 18px; font-weight: 900; color: var(--primary); }
+        .timer {
+            background: var(--primary);
+            color: var(--white);
+            padding: 4px 14px;
+            border-radius: 20px;
+            font-weight: 700;
+            font-size: 18px;
+            min-width: 50px;
+            text-align: center;
+        }
+        .timer.warning { animation: pulse 0.5s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
+            gap: 6px;
+            max-height: 60vh;
+            overflow-y: auto;
+            padding: 10px 0;
+        }
+        .card-item {
+            background: #D98A22;
+            border-radius: 10px;
+            padding: 10px 0;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: 700;
+            color: white;
+            font-size: 14px;
+            border: none;
+        }
+        .card-item.selected { background: #28A745; border: 2px solid #fff; }
+        .card-item.taken { background: #C62828; border: 2px solid #fff; }
+        .card-item:active { transform: scale(0.95); }
+        .card-item .card-number { font-size: 16px; font-weight: 900; }
+        .card-item .card-owner { font-size: 9px; color: #ddd; margin-top: 2px; display: block; }
+
+        .stake-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin: 12px 0;
+        }
+        .stake-btn {
+            padding: 12px;
+            border-radius: 12px;
+            border: 2px solid #ddd;
+            background: var(--white);
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+        .stake-btn:active { transform: scale(0.95); }
+        .stake-btn.active { border-color: var(--gold); background: #FFF8E1; box-shadow: 0 0 0 3px rgba(255,215,0,0.3); }
+        .stake-btn .currency { font-size: 12px; color: #888; }
+        .game-top {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px;
+            background: var(--white);
+            padding: 10px;
+            border-radius: 12px;
+            margin-bottom: 12px;
+            box-shadow: var(--shadow);
+        }
+        .game-top .stat { text-align: center; font-size: 10px; color: #888; }
+        .game-top .stat .val { font-size: 16px; font-weight: 900; color: var(--primary); display: block; }
+        .game-top .stat .val.gold { color: var(--gold-dark); }
+        .game-layout {
+            display: flex;
+            gap: 12px;
+            height: calc(100vh - 280px);
+            min-height: 400px;
+        }
+        .bingo-call {
+            flex: 0 0 auto;
+            width: 160px;
+            background: var(--white);
+            border-radius: 12px;
+            padding: 8px 10px;
+            box-shadow: var(--shadow);
+            max-height: 180px;
+            min-height: 80px;
+            display: flex;
+            flex-direction: column;
+        }
+        .bingo-call .call-header {
+            font-weight: 700;
+            color: var(--primary);
+            font-size: 12px;
+            margin-bottom: 4px;
+            text-align: center;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 4px;
+        }
+        .bingo-call .call-items-mini {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px 6px;
+            justify-content: center;
+            align-items: center;
+            flex: 1;
+            padding: 4px 0;
+        }
+        .call-chip-mini {
+            background: #f5f5f5;
+            border-radius: 12px;
+            padding: 2px 8px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #333;
+            border-left: 3px solid var(--gold);
+            white-space: nowrap;
+            transition: all 0.1s;
+        }
+        .call-chip-mini.called { background: #FFEBEE; color: var(--red); border-left-color: var(--red); }
+        .call-chip-mini.latest { background: var(--gold); color: var(--primary); border-left-color: var(--primary-dark); transform: scale(1.05); }
+        .call-chip-mini.empty { background: transparent; border-left-color: transparent; color: #aaa; font-weight: 400; }
+        .user-cards {
+            flex: 2;
+            background: var(--white);
+            border-radius: 12px;
+            padding: 10px;
+            box-shadow: var(--shadow);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+            min-height: 350px;
+        }
+        .user-cards-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            flex-shrink: 0;
+        }
+        .user-cards-header .title { font-weight: 700; color: var(--primary); font-size: 14px; }
+        .user-cards-header .card-counter { font-size: 12px; color: #888; background: #f0f0f0; padding: 2px 12px; border-radius: 12px; }
+        .user-card-slider {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-height: 0;
+            position: relative;
+        }
+        .slider-arrow {
+            background: var(--primary);
+            color: var(--white);
+            border: none;
+            border-radius: 50%;
+            width: 36px;
+            height: 36px;
+            font-size: 18px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: all 0.2s;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            z-index: 5;
+        }
+        .slider-arrow:active { transform: scale(0.9); }
+        .slider-arrow:disabled { opacity: 0.3; cursor: not-allowed; transform: none; }
+        .slider-arrow.left { background: var(--primary-dark); }
+        .slider-arrow.right { background: var(--primary); }
+        .slider-content {
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+            min-height: 250px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .slider-card-wrapper { width: 100%; max-width: 320px; margin: 0 auto; transition: opacity 0.3s ease; }
+        .user-card-display {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 12px;
+            font-size: 10px;
+            width: 100%;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+        }
+        .user-card-display .card-title { font-weight: 700; color: var(--primary); margin-bottom: 6px; text-align: center; font-size: 13px; }
+        .bingo-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 3px;
+            max-width: 300px;
+            margin: 0 auto;
+        }
+        .bingo-cell {
+            aspect-ratio: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: 700;
+            border-radius: 4px;
+            background: var(--white);
+            border: 1px solid #ddd;
+            padding: 2px;
+        }
+        .bingo-cell.called { background: var(--green); color: var(--white); border-color: var(--green); }
+        .bingo-cell.bingo { background: var(--green) !important; color: var(--white) !important; border-color: var(--green) !important; animation: bingoFlash 0.5s infinite alternate; }
+        @keyframes bingoFlash { from { background: var(--green); } to { background: #1B5E20; } }
+        .bingo-cell.free { background: #FFD54F; border-color: #FFC107; }
+        .bingo-grid-header {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 3px;
+            max-width: 300px;
+            margin: 0 auto 3px auto;
+            font-weight: 700;
+            font-size: 12px;
+            color: var(--primary);
+            text-align: center;
+        }
+        .bingo-grid-header span { background: #f0e6d8; padding: 2px 0; border-radius: 3px; }
+        .winning-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.85);
+            z-index: 300;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            animation: fadeIn 0.5s ease;
+        }
+        .winning-overlay.show { display: flex; }
+        .winning-card {
+            background: #1a1a2e;
+            border-radius: 24px;
+            padding: 24px 20px;
+            max-width: 520px;
+            width: 100%;
+            color: white;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+            border: 2px solid var(--gold);
+            animation: winPulse 0.5s ease;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        @keyframes winPulse { 0% { transform: scale(0.5); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+        .winning-card .win-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid var(--gold);
+            padding-bottom: 10px;
+            margin-bottom: 12px;
+        }
+        .winning-card .win-header h2 { font-size: 28px; font-weight: 900; color: var(--gold); margin: 0; }
+        .winning-card .win-header .win-badge { background: var(--gold); color: #1a1a2e; padding: 4px 14px; border-radius: 20px; font-weight: 700; font-size: 14px; }
+        .winning-card .win-board { background: #0f0f1f; border-radius: 12px; padding: 12px; margin: 10px 0; border: 1px solid #444; }
+        .winning-card .win-board .bingo-grid { max-width: 100%; }
+        .winning-card .win-board .bingo-cell { background: #1a1a2e; color: #ddd; border-color: #333; font-size: 14px; font-weight: 700; aspect-ratio: 1; }
+        .winning-card .win-board .bingo-cell.called { background: #2E7D32; border-color: #2E7D32; color: white; }
+        .winning-card .win-board .bingo-cell.free { background: #FFD54F; border-color: #FFC107; color: #1a1a2e; }
+        .winning-card .win-board .bingo-cell.bingo { background: var(--gold) !important; color: #1a1a2e !important; border-color: var(--gold) !important; animation: bingoFlash 0.5s infinite alternate; }
+        .winning-card .win-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 14px; color: #aaa; }
+        .winning-card .win-footer .auto-start { color: #ff6b6b; font-weight: 700; }
+        .winning-card .winner-list { background: #0f0f1f; border-radius: 10px; padding: 10px 12px; margin: 8px 0; border-left: 4px solid var(--gold); }
+        .winning-card .winner-list .winner-entry { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #333; font-size: 14px; }
+        .winning-card .winner-list .winner-entry:last-child { border-bottom: none; }
+        .winning-card .winner-list .winner-entry .win-card-num { color: var(--gold); font-weight: 700; }
+        .winning-card .winner-list .winner-entry .win-pattern { color: #aaa; font-size: 12px; }
+        .winning-card .winner-list .winner-entry .win-user { color: #4fc3f7; }
+        .winning-card .winner-list .winner-entry .win-status { color: #81c784; font-weight: 700; }
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 250;
+            display: none;
+            align-items: flex-end;
+            justify-content: center;
+            animation: slideUp 0.3s ease;
+        }
+        .modal.show { display: flex; }
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        .modal-content {
+            background: var(--white);
+            border-radius: 24px 24px 0 0;
+            padding: 24px;
+            max-width: 500px;
+            width: 100%;
+            max-height: 85vh;
+            overflow-y: auto;
+        }
+        .modal-content .modal-title { font-size: 20px; font-weight: 900; color: var(--primary); margin-bottom: 16px; text-align: center; }
+        .modal-content .form-group { margin-bottom: 14px; }
+        .modal-content .form-group label { display: block; font-size: 13px; font-weight: 700; color: #555; margin-bottom: 4px; }
+        .modal-content .form-group input, .modal-content .form-group select {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #ddd;
+            border-radius: 12px;
+            font-size: 16px;
+            font-family: inherit;
+            transition: border-color 0.2s;
+            background: #FAFAFA;
+        }
+        .modal-content .form-group input:focus, .modal-content .form-group select:focus { outline: none; border-color: var(--gold); }
+        .btn {
+            padding: 14px 24px;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            width: 100%;
+            font-family: inherit;
+        }
+        .btn:active { transform: scale(0.97); }
+        .btn-primary { background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: var(--white); }
+        .btn-gold { background: linear-gradient(135deg, var(--gold), var(--gold-dark)); color: var(--primary); }
+        .btn-outline { background: transparent; border: 2px solid var(--primary); color: var(--primary); }
+        .btn-success { background: var(--green); color: var(--white); }
+        .btn-danger { background: var(--red); color: var(--white); }
+        .btn-sm { padding: 8px 16px; font-size: 13px; width: auto; }
+        .flex-between { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+        .flex-center { display: flex; justify-content: center; align-items: center; gap: 10px; }
+        .mt-8 { margin-top: 8px; }
+        .mt-12 { margin-top: 12px; }
+        .mt-16 { margin-top: 16px; }
+        .mb-8 { margin-bottom: 8px; }
+        .mb-12 { margin-bottom: 12px; }
+        .gap-8 { gap: 8px; }
+        .gap-12 { gap: 12px; }
+        .text-center { text-align: center; }
+        .text-sm { font-size: 13px; }
+        .text-muted { color: #888; }
+        .badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; }
+        .badge-success { background: #E8F5E9; color: var(--green); }
+        .badge-warning { background: #FFF8E1; color: var(--gold-dark); }
+        .badge-danger { background: #FFEBEE; color: var(--red); }
+        .badge-red { background: var(--red); color: white; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: #F5F5F5; }
+        ::-webkit-scrollbar-thumb { background: var(--gold); border-radius: 4px; }
+        .admin-panel { display: none; background: var(--white); border-radius: 16px; padding: 20px; margin-top: 16px; box-shadow: var(--shadow); border: 3px solid var(--gold); }
+        .admin-panel.show { display: block; }
+        .admin-panel .admin-title { font-size: 18px; font-weight: 900; color: var(--primary); margin-bottom: 12px; text-align: center; border-bottom: 2px solid var(--gold); padding-bottom: 8px; }
+        .admin-badge { background: var(--gold); color: var(--primary); font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 700; margin-left: 4px; }
+        .analysis-section {
+            background: var(--white);
+            border-radius: 16px;
+            padding: 18px 16px;
+            margin: 16px 0 8px 0;
+            box-shadow: var(--shadow);
+            border-left: 6px solid var(--gold);
+        }
+        .analysis-section h3 { font-size: 18px; font-weight: 900; color: var(--primary); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+        .analysis-section h3 small { font-size: 14px; font-weight: 400; color: #888; }
+        .analysis-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; }
+        .analysis-item { background: #faf8f5; border-radius: 10px; padding: 10px 12px; border-bottom: 2px solid #eee; }
+        .analysis-item .label { font-size: 11px; text-transform: uppercase; color: #888; letter-spacing: 0.3px; }
+        .analysis-item .value { font-size: 16px; font-weight: 700; color: var(--primary-dark); margin-top: 2px; }
+        .analysis-item .value.gold { color: var(--gold-dark); }
+        .analysis-item .value.green { color: var(--green); }
+        .connection-status { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+        .connection-status.connected { background: #4CAF50; }
+        .connection-status.disconnected { background: #f44336; }
+        .connection-status.connecting { background: #FFC107; animation: pulse 1s infinite; }
+        .telegram-login-btn {
+            background: #0088cc;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 8px;
+        }
+        .telegram-login-btn:active { transform: scale(0.97); }
+        .admin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .admin-grid .grid-item { background: var(--white); border-radius: 12px; padding: 12px; box-shadow: var(--shadow); }
+        .admin-grid .grid-item .item-title { font-weight: 700; color: var(--primary); font-size: 14px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+        .admin-grid .grid-item .item-title .badge-red { background: var(--red); color: white; border-radius: 50%; padding: 2px 8px; font-size: 12px; }
+        .admin-scroll { max-height: 200px; overflow-y: auto; font-size: 13px; }
+        .admin-scroll .entry { padding: 4px 0; border-bottom: 1px solid #eee; }
+        .admin-search { width: 100%; padding: 6px 10px; border-radius: 8px; border: 1px solid #ddd; font-size: 13px; margin-bottom: 8px; }
+        @media (max-width: 480px) {
+            .analysis-grid { grid-template-columns: 1fr; }
+            .menu-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+            .menu-item { padding: 14px 8px; }
+            .menu-item .icon { font-size: 24px; }
+            .menu-item .label { font-size: 11px; }
+            .game-top { grid-template-columns: repeat(2, 1fr); }
+            .game-layout { flex-direction: column; height: auto; }
+            .bingo-call { width: 100%; flex: 1; max-height: 100px; min-height: 60px; }
+            .user-cards { min-height: 300px; }
+            .cards-grid { grid-template-columns: repeat(auto-fill, minmax(50px, 1fr)); }
+            .stake-grid { grid-template-columns: repeat(3, 1fr); }
+            .selection-header .info-item .value { font-size: 14px; }
+            .winning-card { padding: 16px; }
+            .winning-card .win-header h2 { font-size: 22px; }
+            .slider-arrow { width: 28px; height: 28px; font-size: 14px; }
+            .slider-card-wrapper { max-width: 100%; }
+            .admin-grid { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 360px) {
+            .menu-grid { grid-template-columns: repeat(2, 1fr); }
+            .header-title { font-size: 18px; }
+            .header-balance { font-size: 13px; padding: 4px 12px; }
+        }
+        
+        .card-popup {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.8);
+            z-index: 500;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+        .card-popup.show { display: flex; }
+        .popup-content {
+            background: #FFE4B5;
+            border-radius: 20px;
+            padding: 20px;
+            max-width: 350px;
+            width: 90%;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .popup-bingo-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin: 15px 0; }
+        .popup-bingo-cell { background: white; padding: 8px 0; border-radius: 6px; font-weight: bold; font-size: 14px; }
+        .popup-bingo-cell.free { background: #28A745; color: white; }
+        .popup-btn { padding: 10px 20px; border: none; border-radius: 10px; font-weight: bold; width: 45%; margin: 5px; cursor: pointer; }
+        .popup-btn-accept { background: #28A745; color: white; }
+        .popup-btn-cancel { background: #D98A22; color: white; }
+
+        .toast {
+            position: fixed;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(135deg, #2E7D32, #1B5E20);
+            color: white;
+            padding: 16px 28px;
+            border-radius: 16px;
+            font-size: 18px;
+            font-weight: 700;
+            z-index: 2000;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+            border: 2px solid var(--gold);
+            animation: slideDown 0.5s ease;
+            max-width: 90%;
+            text-align: center;
+        }
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateX(-50%) translateY(-30px); }
+            to { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-title">
+            <span class="icon">🎯</span>
+            ማታኒ ቢንጎ
+        </div>
+        <div class="header-balance" id="balanceClick" onclick="toggleAdminLogin()">
+            💰 <span class="amount" id="headerBalance">0</span> ብር
+            <span class="admin-badge" id="adminBadge" style="display:none;">👑</span>
+        </div>
+    </header>
+
+    <!-- PAGE MENU -->
+    <div id="page-menu" class="page active">
+        <div class="menu-grid">
+            <div class="menu-item" onclick="handleRegister()">
+                <span class="icon">📝</span>
+                <div class="label">መመዝገብ</div>
+                <div class="sub-label">Register</div>
+            </div>
+            <div class="menu-item" onclick="showStakeSelection('play')">
+                <span class="icon">🎮</span>
+                <div class="label">ጨዋታ</div>
+                <div class="sub-label">Play</div>
+            </div>
+            <div class="menu-item" onclick="showDeposit()">
+                <span class="icon">💰</span>
+                <div class="label">ገንዘብ አስገባ</div>
+                <div class="sub-label">Deposit</div>
+            </div>
+            <div class="menu-item" onclick="showWithdraw()">
+                <span class="icon">🏦</span>
+                <div class="label">ገንዘብ አውጣ</div>
+                <div class="sub-label">Withdraw</div>
+            </div>
+            <div class="menu-item" onclick="showTransfer()">
+                <span class="icon">🔄</span>
+                <div class="label">ገንዘብ አስተላልፍ</div>
+                <div class="sub-label">Transfer</div>
+            </div>
+            <div class="menu-item" onclick="showInvite()">
+                <span class="icon">👥</span>
+                <div class="label">ጋብዝ እና ቦነስ</div>
+                <div class="sub-label">Invite & Bonus</div>
+            </div>
+        </div>
+
+        <div style="background: var(--white); border-radius: 16px; padding: 16px; margin-top: 12px; box-shadow: var(--shadow);">
+            <div class="flex-between">
+                <span style="font-weight: 700;">📊 የጨዋታ ስታቲስቲክስ</span>
+                <span id="connectionStatus" style="font-size:12px;">
+                    <span class="connection-status connecting" id="statusDot"></span>
+                    <span id="statusText">Connecting...</span>
+                </span>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 8px;">
+                <div><span class="text-muted">ጨዋታዎች</span><br><strong id="gamesPlayed">0</strong></div>
+                <div><span class="text-muted">አሸናፊነት</span><br><strong id="winsCount">0</strong></div>
+                <div><span class="text-muted">አሸናፊነት መጠን</span><br><strong id="winRate">0%</strong></div>
+                <div><span class="text-muted">አጠቃላይ አሸናፊ</span><br><strong id="totalWinnings">0 ብር</strong></div>
+            </div>
+        </div>
+
+        <div class="analysis-section">
+            <h3>👥 Multiplayer Lobby <small>· በርካታ ተጫዋቾች</small></h3>
+            <div class="analysis-grid">
+                <div class="analysis-item"><span class="label">Players</span><div class="value" id="playerCountDisplay">0</div></div>
+                <div class="analysis-item"><span class="label">Total Cards Selected</span><div class="value gold" id="totalCardsDisplay">0</div></div>
+                <div class="analysis-item"><span class="label">Current User</span><div class="value green" id="currentUserDisplay">-</div></div>
+                <div class="analysis-item"><span class="label">Game Status</span><div class="value" id="gameStatusDisplay">⏳ Waiting</div></div>
+            </div>
+        </div>
+
+        <div class="admin-panel" id="adminPanel">
+            <div class="admin-title">👑 አስተዳዳሪ ፓነል</div>
+            <div id="adminLogin">
+                <div class="form-group"><label>ስም</label><input type="text" id="adminUsername" placeholder="የአስተዳዳሪ ስም"></div>
+                <div class="form-group"><label>የይለፍ ቃል</label><input type="password" id="adminPassword" placeholder="የይለፍ ቃል"></div>
+                <button class="btn btn-gold" onclick="adminLogin()">🔑 ግባ</button>
+                <div class="login-error" id="loginError" style="color:var(--red);font-size:13px;text-align:center;margin-top:8px;"></div>
+            </div>
+            <div id="adminContent" style="display:none;">
+                <h4 class="mt-12 mb-8" style="border-bottom: 2px solid #ddd; padding-bottom: 6px;">💰 የገንዘብ ጥያቄዎች</h4>
+                <div id="adminDeposits"><div class="text-muted text-sm text-center">Loading Deposits...</div></div>
+                <div id="adminWithdrawals"><div class="text-muted text-sm text-center">Loading Withdrawals...</div></div>
+
+                <h4 class="mt-12 mb-8" style="border-bottom: 2px solid #ddd; padding-bottom: 6px;">👥 ተጫዋቾች</h4>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                    <span style="font-weight:700;">📋 ሁሉም ተጫዋቾች</span>
+                    <button class="btn btn-sm btn-outline" onclick="adminLogout()">🚪 ውጣ</button>
+                </div>
+                <div id="adminRequests"><div class="text-muted text-sm text-center">Loading...</div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PAGE SELECTION -->
+    <div id="page-selection" class="page">
+        <div class="selection-header">
+            <div class="info-item"><span>ክምችት</span><span class="value" id="selStake">0 ብር</span></div>
+            <div class="info-item"><span>የተመረጡ</span><span class="value" id="selCount">0</span></div>
+            <div class="info-item"><span>ጨዋታ</span><span class="value" id="selGameNum">#0</span></div>
+            <div class="timer" id="selTimer">60</div>
+        </div>
+        <div style="background: var(--white); border-radius: 12px; padding: 12px; margin-bottom: 12px; box-shadow: var(--shadow);">
+            <div style="font-size: 13px; font-weight: 700; margin-bottom: 6px;">📋 ካርድ ምረጥ (ከ200) · ማለቂያ የሌለው ቁጥር</div>
+            <div class="flex-between">
+                <span class="text-muted text-sm">የእርስዎ ምርጫ</span>
+                <span id="selStatus" style="font-size: 13px; font-weight: 700; color: var(--primary);">0 ተመርጧል</span>
+            </div>
+            <div class="flex-between mt-8">
+                <span class="text-muted text-sm">👥 አጠቃላይ የተመረጡ</span>
+                <span id="globalSelCount" style="font-size: 13px; font-weight: 700; color: var(--gold-dark);">0 ካርዶች</span>
+            </div>
+        </div>
+        <div class="cards-grid" id="cardsContainer"></div>
+    </div>
+
+    <!-- PAGE GAME -->
+    <div id="page-game" class="page">
+        <div class="game-top">
+            <div class="stat"><span>ክምችት</span><span class="val" id="gameStake">0 ብር</span></div>
+            <div class="stat"><span>ካርዶች</span><span class="val" id="gameCards">0</span></div>
+            <div class="stat"><span>ድራሽ</span><span class="val gold" id="gameDerash">0 ብር</span></div>
+            <div class="stat"><span>የተጠራ</span><span class="val" id="gameCalled">0/75</span></div>
+        </div>
+        <div class="game-layout">
+            <div class="bingo-call" id="bingoCallList">
+                <div class="call-header">📢 የቢንጎ ቁጥሮች</div>
+                <div id="callItemsMini" class="call-items-mini"></div>
+            </div>
+            <div class="user-cards" id="userCardsDisplay">
+                <div class="user-cards-header">
+                    <span class="title">🎴 የእርስዎ ካርዶች <span id="gamePlayerName" style="font-size:11px;color:#888;font-weight:400;"></span></span>
+                    <span class="card-counter" id="cardCounter">1 / 1</span>
+                </div>
+                <div class="user-card-slider" id="cardSlider">
+                    <button class="slider-arrow left" id="prevCardBtn" onclick="slideCard(-1)">◀</button>
+                    <div class="slider-content" id="sliderContent">
+                        <div class="slider-card-wrapper" id="sliderCardWrapper"></div>
+                    </div>
+                    <button class="slider-arrow right" id="nextCardBtn" onclick="slideCard(1)">▶</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PAGE ADMIN (NEW) -->
+    <div id="page-admin" class="page">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <h2 style="color:var(--primary);">👑 አስተዳዳሪ ፓነል</h2>
+            <button class="btn btn-sm btn-outline" onclick="navigateTo('menu')">🔙 ወደ ዋና</button>
+        </div>
+
+        <div class="admin-grid">
+            <div class="grid-item">
+                <div class="item-title">👥 ተጫዋቾች</div>
+                <div id="adminPlayersList" class="admin-scroll">Loading...</div>
+            </div>
+            <div class="grid-item">
+                <div class="item-title">
+                    📥 ጥያቄዎች
+                    <span id="requestBadge" class="badge-red" style="display:none; border-radius:50%; padding:2px 8px; font-size:12px;">0</span>
+                </div>
+                <div id="adminRequestsList" class="admin-scroll">Loading...</div>
+            </div>
+            <div class="grid-item">
+                <div class="item-title">💸 ላዘር (30% ቅነሳ)</div>
+                <div id="adminLaserInfo" style="font-size:13px;">
+                    ጠቅላላ ክምችት: <strong id="laserTotalStakes">0</strong> ብር<br>
+                    የአሸናፊው ድርሻ (70%): <strong id="laserWinnerShare">0</strong> ብር<br>
+                    የላዘር ድርሻ (30%): <strong id="laserHouseCut" style="color: var(--red);">0</strong> ብር
+                </div>
+            </div>
+            <div class="grid-item">
+                <div class="item-title">🔒 ተጠቃሚ ቁጥጥር</div>
+                <input type="text" id="userSearchInput" class="admin-search" placeholder="ሰው ፈልግ...">
+                <div id="userControlList" class="admin-scroll">Loading...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODALS -->
+    <div class="modal" id="depositModal"></div>
+    <div class="modal" id="withdrawModal"></div>
+    <div class="modal" id="transferModal"></div>
+    <div class="modal" id="inviteModal"></div>
+    <div class="modal" id="userInfoModal"></div>
+    <div class="modal" id="stakeModal">
+        <div class="modal-content">
+            <div class="modal-title">🎯 ክምችት ምረጥ</div>
+            <div class="stake-grid" id="stakeOptions">
+                <div class="stake-btn" data-stake="10" onclick="selectStake(this)">10 <span class="currency">ብር</span></div>
+                <div class="stake-btn" data-stake="20" onclick="selectStake(this)">20 <span class="currency">ብር</span></div>
+                <div class="stake-btn" data-stake="30" onclick="selectStake(this)">30 <span class="currency">ብር</span></div>
+                <div class="stake-btn" data-stake="50" onclick="selectStake(this)">50 <span class="currency">ብር</span></div>
+                <div class="stake-btn" data-stake="100" onclick="selectStake(this)">100 <span class="currency">ብር</span></div>
+                <div class="stake-btn" data-stake="200" onclick="selectStake(this)">200 <span class="currency">ብር</span></div>
+            </div>
+            <button class="btn btn-primary" id="stakeConfirmBtn" onclick="confirmStake()" disabled>✅ አረጋግጥ</button>
+            <button class="btn btn-outline mt-8" onclick="closeModal('stakeModal')">✖ ዝጋ</button>
+        </div>
+    </div>
+
+    <!-- WINNING OVERLAY -->
+    <div class="winning-overlay" id="winningOverlay">
+        <div class="winning-card">
+            <div class="win-header">
+                <h2>🏆 BINGO!</h2>
+                <span class="win-badge">Winner!</span>
+            </div>
+            <div id="winningMessage" style="text-align:center;margin:6px 0;color:#4fc3f7;font-size:15px;font-weight:700;"></div>
+            <div class="winner-list" id="winnerListContainer"></div>
+            <div class="win-board" id="winBoardContainer"></div>
+            <div class="win-footer">
+                <span>🔄 ቀጣይ ጨዋታ በ <span id="winCountdown">10</span> ሰከንድ</span>
+                <span style="color: var(--gold);">💰 <span id="winAmountDisplay">0</span> ብር</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- BOTTOM NAV -->
+    <nav class="bottom-nav">
+        <button class="nav-item" id="nav-admin-home" onclick="handleNavAdminHome()" style="display:none;">
+            <span class="nav-icon" id="nav-admin-icon">🏠</span>
+            <span id="nav-admin-label">ዋና</span>
+        </button>
+        <button class="nav-item" onclick="showStakeSelection('play')"><span class="nav-icon">🎮</span>ጨዋታ</button>
+        <button class="nav-item" onclick="showDeposit()"><span class="nav-icon">💰</span>አስገባ</button>
+        <button class="nav-item" onclick="showWithdraw()"><span class="nav-icon">🏦</span>አውጣ</button>
+        <button class="nav-item" onclick="navigateTo('menu')"><span class="nav-icon">👤</span>መገለጫ</button>
+    </nav>
+
+    <script>
+    // ============================================================
+    // PRODUCTION CONFIGURATION
+    // ============================================================
+    
+    const MBINGO_FRONTEND_BUILD = '2026-08-30-robust-start';
+
+    const PRODUCTION_CONFIG = {
+        API_URL: 'https://m-bingo-backend.onrender.com',
+        WS_URL: 'wss://m-bingo-backend.onrender.com',
+        FRONTEND_URL: 'https://myf-delivery.github.io/M-Bingo/',
+        BOT_USERNAME: 'M_bingo_bot',
+        BOT_LINK: 'https://t.me/M_bingo_bot',
+        ADMIN_IDS: ['555508978'],
+    };
+    
+    const CONFIG = PRODUCTION_CONFIG;
+    const SERVER_URL = CONFIG.WS_URL;
+
+    let ws = null;
+    let playerId = null;
+    let players = [];
+    let gameState = {
+        status: 'waiting',
+        stake: 0,
+        gameNumber: 0,
+        calledNumbers: [],
+        calledCount: 0,
+        totalCardsInPlay: 0,
+        selectedCards: [],
+        selectionTimeLeft: 60,
+        isPlaying: false
+    };
+    let sliderIndex = 0;
+    let sliderCards = [];
+    let currentGameCards = [];
+    let isGameActive = false;
+    let selectionTimer = null;
+    let winCountdownTimer = null;
+    let stakeContext = 'play';
+    let selectedStake = 0;
+    let isTelegramUser = false;
+    let playerStats = { gamesPlayed: 0, wins: 0, totalWinnings: 0 };
+    let BOARDS = [];
+    let isRegistering = false;
+    let messageQueue = [];
+    let isAdmin = false;
+
+    // ============================================================
+    // ADMIN STATE - HTTP BASED
+    // ============================================================
+
+    let adminState = {
+        isLoggedIn: false,
+        adminId: null
+    };
+
+    // ============================================================
+    // BINGO BOARD - LOAD FROM API
+    // ============================================================
+
+    async function loadCardsFromAPI() {
+        try {
+            console.log('📡 Loading cards from API...');
+            const response = await fetch(`${CONFIG.API_URL}/api/cards`, { mode: 'cors' });
+            const cards = await response.json();
+            
+            if (cards && cards.length > 0) {
+                BOARDS = cards.map(card => card.board);
+                console.log('✅ Loaded', BOARDS.length, 'cards from API');
+                
+                if (document.getElementById('page-selection').classList.contains('active')) {
+                    renderCards();
+                }
+                return true;
+            } else {
+                console.warn('⚠️ No cards from API, using generated cards');
+                BOARDS = generateBoards();
+                return false;
+            }
+        } catch (error) {
+            console.error('❌ Failed to load cards from API:', error);
+            console.warn('⚠️ Using generated cards as fallback');
+            BOARDS = generateBoards();
+            return false;
+        }
+    }
+
+    function generateBoards() {
+        const boards = [];
+        for (let b = 1; b <= 200; b++) {
+            const board = [];
+            for (let row = 0; row < 5; row++) {
+                const rowData = [];
+                for (let col = 0; col < 5; col++) {
+                    let num;
+                    if (col === 2 && row === 2) { 
+                        num = '★'; 
+                    } else {
+                        const min = col * 15 + 1;
+                        const max = (col + 1) * 15;
+                        const seed = (b * 7 + row * 13 + col * 31) % 15;
+                        num = min + seed;
+                    }
+                    rowData.push(num);
+                }
+                board.push(rowData);
+            }
+            boards.push(board);
+        }
+        return boards;
+    }
+
+    // ============================================================
+    // API HELPERS
+    // ============================================================
+
+    async function apiRequest(endpoint, options = {}) {
+        const url = `${CONFIG.API_URL}${endpoint}`;
+        const defaultOptions = {
+            headers: { 'Content-Type': 'application/json' },
+            mode: 'cors',
+        };
+        const mergedOptions = { ...defaultOptions, ...options };
+        try {
+            const response = await fetch(url, mergedOptions);
+            return await response.json();
+        } catch (error) {
+            console.error('API Error:', error);
+            throw error;
+        }
+    }
+
+    // ============================================================
+    // UI HELPERS
+    // ============================================================
+
+    function updateConnectionStatus(status, text) {
+        const dot = document.getElementById('statusDot');
+        const textEl = document.getElementById('statusText');
+        if (dot) dot.className = 'connection-status ' + status;
+        if (textEl) textEl.textContent = text;
+    }
+
+    function sendToServer(type, data) {
+        const message = { type, data };
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify(message));
+        } else {
+            console.warn('WebSocket not connected, message queued:', type);
+            messageQueue.push(message);
+            if (!ws || ws.readyState === WebSocket.CLOSED) {
+                connectWebSocket();
+            }
+        }
+    }
+
+    function showPage(pageId) {
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+        document.getElementById(pageId).classList.add('active');
+    }
+
+    function navigateTo(page) {
+        if (page === 'menu') {
+            showPage('page-menu');
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            document.getElementById('nav-admin-home').classList.add('active');
+            updatePlayerUI();
+        }
+    }
+
+    function handleNavAdminHome() {
+        if (isAdmin) {
+            showPage('page-admin');
+            fetchAdminData();
+        } else {
+            navigateTo('menu');
+        }
+    }
+
+    function showModal(id) { document.getElementById(id).classList.add('show'); }
+    function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+    
+    function formatMoney(amount) { return (amount || 0).toLocaleString('en-US'); }
+    
+    function getLetterForNumber(num) {
+        if (num === '★' || typeof num === 'string') return '';
+        const idx = Math.floor((num - 1) / 15);
+        return ['B', 'I', 'N', 'G', 'O'][idx] || '?';
+    }
+
+    function showToast(message, isSuccess = true) {
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.style.background = isSuccess 
+            ? 'linear-gradient(135deg, #2E7D32, #1B5E20)'
+            : 'linear-gradient(135deg, #C62828, #B71C1C)';
+        toast.textContent = message;
+        document.body.appendChild(toast);
+
+        setTimeout(() => {
+            toast.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateX(-50%) translateY(-20px)';
+            setTimeout(() => toast.remove(), 500);
+        }, 3000);
+    }
+
+    // ============================================================
+    // UPDATE STATS UI
+    // ============================================================
+
+    function updateStatsUI() {
+        document.getElementById('gamesPlayed').textContent = playerStats.gamesPlayed || 0;
+        document.getElementById('winsCount').textContent = playerStats.wins || 0;
+        const games = playerStats.gamesPlayed || 0;
+        const wins = playerStats.wins || 0;
+        const winRate = games > 0 ? Math.round((wins / games) * 100) : 0;
+        document.getElementById('winRate').textContent = winRate + '%';
+        document.getElementById('totalWinnings').textContent = formatMoney(playerStats.totalWinnings || 0) + ' ብር';
+        const currentPlayer = players.find(p => p.id === playerId);
+        if (currentPlayer) {
+            document.getElementById('headerBalance').textContent = formatMoney(currentPlayer.balance || 0);
+        }
+    }
+
+    // ============================================================
+    // 🔵 UNIVERSAL REGISTRATION
+    // ============================================================
+
+    async function autoRegisterOrLogin() {
+        if (isRegistering) {
+            console.warn('Registration already in progress.');
+            return;
+        }
+        isRegistering = true;
+
+        const savedPlayerId = localStorage.getItem('mbingo_playerId');
+        if (savedPlayerId) {
+            playerId = savedPlayerId;
+            try {
+                if (!ws || ws.readyState !== WebSocket.OPEN) {
+                    await waitForSocketConnection(5000);
+                }
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    sendToServer('auth', { userId: playerId });
+                    isRegistering = false;
+                    updatePlayerUI();
+                    return;
+                }
+            } catch (e) {
+                console.warn('Failed to reconnect with saved ID, prompting registration');
+            }
+        }
+
+        let telegramId = null;
+        let firstName = null;
+        let username = null;
+        let phoneNumber = null;
+
+        if (window.Telegram && window.Telegram.WebApp) {
+            const tg = window.Telegram.WebApp;
+            tg.ready();
+            
+            const user = tg.initDataUnsafe?.user;
+            if (user) {
+                telegramId = user.id;
+                firstName = user.first_name || 'Player';
+                username = user.username || `user_${user.id}`;
+                await completeRegistration(telegramId, firstName, username, null);
+                return;
+            }
+        }
+
+        showBrowserRegistrationModal();
+        isRegistering = false;
+    }
+
+    // ============================================================
+    // TELEGRAM CONTACT REQUEST
+    // ============================================================
+
+    function showTelegramContactRequest() {
+        const overlay = document.createElement('div');
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.85);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.3s ease;
+        `;
+        overlay.id = 'contactRequestOverlay';
+
+        overlay.innerHTML = `
+            <div style="
+                background: linear-gradient(135deg, #1a1a2e, #16213e);
+                border-radius: 24px;
+                padding: 40px 30px;
+                max-width: 400px;
+                width: 90%;
+                text-align: center;
+                border: 2px solid var(--gold);
+                box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+            ">
+                <div style="font-size: 60px; margin-bottom: 16px;">📱</div>
+                <h2 style="color: var(--gold); font-size: 24px; margin-bottom: 8px;">Share Your Contact</h2>
+                <p style="color: #aaa; font-size: 14px; margin-bottom: 24px; line-height: 1.6;">
+                    Please share your Telegram contact to automatically register and save your account.
+                    You'll only need to do this once.
+                </p>
+                <button onclick="requestTelegramContact()" style="
+                    background: linear-gradient(135deg, #0088cc, #005f8a);
+                    color: white;
+                    border: none;
+                    padding: 16px 32px;
+                    border-radius: 14px;
+                    font-size: 18px;
+                    font-weight: 700;
+                    cursor: pointer;
+                    width: 100%;
+                    transition: transform 0.2s;
+                    font-family: inherit;
+                " onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
+                    📤 Share Contact
+                </button>
+                <button onclick="closeContactRequest()" style="
+                    background: transparent;
+                    color: #666;
+                    border: none;
+                    padding: 12px;
+                    margin-top: 12px;
+                    font-size: 14px;
+                    cursor: pointer;
+                    width: 100%;
+                    font-family: inherit;
+                ">
+                    Cancel
+                </button>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+    }
+
+    function requestTelegramContact() {
+        if (window.Telegram && window.Telegram.WebApp) {
+            try {
+                window.Telegram.WebApp.requestContact();
+            } catch (e) {
+                console.error('Failed to request contact:', e);
+                showToast('❌ Please open the bot and click "Start" to register.', false);
+                closeContactRequest();
+            }
+        }
+    }
+
+    function closeContactRequest() {
+        const overlay = document.getElementById('contactRequestOverlay');
+        if (overlay) overlay.remove();
+        isRegistering = false;
+    }
+
+    // ============================================================
+    // BROWSER REGISTRATION MODAL
+    // ============================================================
+
+    function showBrowserRegistrationModal() {
+        const overlay = document.createElement('div');
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.85);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.3s ease;
+        `;
+        overlay.id = 'browserRegisterOverlay';
+
+        overlay.innerHTML = `
+            <div style="
+                background: linear-gradient(135deg, #1a1a2e, #16213e);
+                border-radius: 24px;
+                padding: 40px 30px;
+                max-width: 400px;
+                width: 90%;
+                border: 2px solid var(--gold);
+                box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+            ">
+                <div style="font-size: 48px; margin-bottom: 12px;">🎯</div>
+                <h2 style="color: var(--gold); font-size: 22px; margin-bottom: 16px;">Welcome to M-Bingo!</h2>
+                <p style="color: #aaa; font-size: 14px; margin-bottom: 20px; line-height: 1.6;">
+                    Enter your name to create an account. This will be your display name in the game.
+                </p>
+                <input id="browserNameInput" type="text" placeholder="Enter your name..." style="
+                    width: 100%;
+                    padding: 14px 18px;
+                    border-radius: 12px;
+                    border: 2px solid #333;
+                    background: #0f0f1f;
+                    color: white;
+                    font-size: 16px;
+                    margin-bottom: 16px;
+                    font-family: inherit;
+                    outline: none;
+                " onfocus="this.style.borderColor='var(--gold)'" onblur="this.style.borderColor='#333'">
+                <button onclick="submitBrowserRegistration()" style="
+                    background: linear-gradient(135deg, var(--gold), var(--gold-dark));
+                    color: var(--primary);
+                    border: none;
+                    padding: 16px;
+                    border-radius: 14px;
+                    font-size: 18px;
+                    font-weight: 700;
+                    cursor: pointer;
+                    width: 100%;
+                    transition: transform 0.2s;
+                    font-family: inherit;
+                " onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
+                    ✅ Register
+                </button>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+        setTimeout(() => {
+            const input = document.getElementById('browserNameInput');
+            if (input) input.focus();
+        }, 300);
+    }
+
+    function submitBrowserRegistration() {
+        const input = document.getElementById('browserNameInput');
+        const name = input?.value?.trim();
+
+        if (!name || name.length < 2) {
+            showToast('❌ Please enter a valid name (at least 2 characters)', false);
+            return;
+        }
+
+        const overlay = document.getElementById('browserRegisterOverlay');
+        if (overlay) overlay.remove();
+
+        const telegramId = Date.now() + Math.floor(Math.random() * 1000);
+        const firstName = name;
+        const username = 'browser_user';
+
+        completeRegistration(telegramId, firstName, username, null);
+    }
+
+    // ============================================================
+    // COMPLETE REGISTRATION
+    // ============================================================
+
+    async function completeRegistration(telegramId, firstName, username, phoneNumber) {
+        try {
+            console.log('📝 Registering user:', firstName);
+            const response = await fetch(`${CONFIG.API_URL}/api/users/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                mode: 'cors',
+                body: JSON.stringify({
+                    telegramId: telegramId,
+                    username: username || firstName.toLowerCase().replace(/\s/g, '_'),
+                    firstName: firstName,
+                    lastName: '',
+                    phone: phoneNumber || '',
+                    telegramInitData: window.Telegram?.WebApp?.initData || ''
+                })
+            });
+            const result = await response.json();
+
+            if (result.success && result.user) {
+                playerId = result.user.id;
+                localStorage.setItem('mbingo_playerId', playerId);
+                
+                document.getElementById('currentUserDisplay').textContent = result.user.first_name || 'Player';
+                document.getElementById('headerBalance').textContent = formatMoney(result.user.balance || 0);
+                
+                try {
+                    if (!ws || ws.readyState !== WebSocket.OPEN) {
+                        await waitForSocketConnection(5000);
+                    }
+                    
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        sendToServer('auth', { userId: playerId });
+                        setTimeout(() => { if (isRegistering) isRegistering = false; }, 1000);
+                        showToast(`✅ እንኳን ደህና መጡ ${result.user.first_name}!`);
+                        renderCards();
+                        updatePlayerUI();
+                        closeContactRequest();
+                        const browserOverlay = document.getElementById('browserRegisterOverlay');
+                        if (browserOverlay) browserOverlay.remove();
+                    } else {
+                        throw new Error('WebSocket not connected');
+                    }
+                } catch (wsError) {
+                    isRegistering = false;
+                    showToast('⚠️ Server connection issue, but you are registered!');
+                    renderCards();
+                    updatePlayerUI();
+                    closeContactRequest();
+                    const browserOverlay = document.getElementById('browserRegisterOverlay');
+                    if (browserOverlay) browserOverlay.remove();
+                }
+            } else {
+                showToast('❌ Registration failed: ' + (result.message || result.error || 'Unknown error'), false);
+            }
+        } catch (error) {
+            console.error('Registration error:', error);
+            showToast('❌ Registration error: ' + error.message, false);
+        } finally {
+            isRegistering = false;
+        }
+    }
+
+    // ============================================================
+    // TELEGRAM CONTACT HANDLER
+    // ============================================================
+
+    function handleTelegramContact(contactData) {
+        console.log('📱 Contact received:', contactData);
+        if (contactData && contactData.id) {
+            const telegramId = contactData.id;
+            const firstName = contactData.first_name || 'Player';
+            const username = contactData.username || `user_${telegramId}`;
+            const phoneNumber = contactData.phone_number || '';
+
+            closeContactRequest();
+            completeRegistration(telegramId, firstName, username, phoneNumber);
+        }
+    }
+
+    if (window.Telegram && window.Telegram.WebApp) {
+        window.Telegram.WebApp.onEvent('contact', function(contact) {
+            handleTelegramContact(contact);
+        });
+    }
+
+    // ============================================================
+    // WEBSOCKET CONNECTION
+    // ============================================================
+
+    function connectWebSocket() {
+        if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+            return;
+        }
+
+        updateConnectionStatus('connecting', 'Connecting...');
+        
+        const urls = [SERVER_URL];
+        let currentUrlIndex = 0;
+        
+        function tryConnect() {
+            if (currentUrlIndex >= urls.length) {
+                console.error('❌ All WebSocket URLs failed');
+                updateConnectionStatus('disconnected', 'Failed ❌');
+                setTimeout(connectWebSocket, 5000);
+                return;
+            }
+            
+            const url = urls[currentUrlIndex];
+            console.log(`🔄 Trying WebSocket: ${url}`);
+            
+            try {
+                ws = new WebSocket(url);
+                
+                ws.onopen = () => {
+                    console.log(`✅ Connected to ${url}`);
+                    updateConnectionStatus('connected', 'Connected ✅');
+                    
+                    while (messageQueue.length > 0) {
+                        ws.send(JSON.stringify(messageQueue.shift()));
+                    }
+                };
+                
+                ws.onmessage = (event) => {
+                    try {
+                        const message = JSON.parse(event.data);
+                        handleServerMessage(message);
+                    } catch (e) { console.error('Parse error:', e); }
+                };
+                
+                ws.onclose = () => {
+                    console.log(`🔴 Disconnected from ${url}`);
+                    updateConnectionStatus('disconnected', 'Disconnected ❌');
+                    setTimeout(() => {
+                        if (!ws || ws.readyState === WebSocket.CLOSED) {
+                            currentUrlIndex++;
+                            tryConnect();
+                        }
+                    }, 3000);
+                };
+                
+                ws.onerror = (error) => {
+                    console.error(`❌ WebSocket error on ${url}:`, error);
+                    ws.close();
+                };
+                
+            } catch (e) {
+                console.error('Connection error:', e);
+                currentUrlIndex++;
+                tryConnect();
+            }
+        }
+        
+        tryConnect();
+    }
+
+    function waitForSocketConnection(timeout = 10000) {
+        return new Promise((resolve, reject) => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                resolve();
+                return;
+            }
+            connectWebSocket();
+            
+            const startTime = Date.now();
+            const checkInterval = setInterval(() => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    clearInterval(checkInterval);
+                    resolve();
+                } else if (Date.now() - startTime > timeout) {
+                    clearInterval(checkInterval);
+                    reject(new Error('WebSocket connection timed out'));
+                }
+            }, 300);
+        });
+    }
+
+    // ============================================================
+    // HANDLE SERVER MESSAGES
+    // ============================================================
+
+    function handleServerMessage(message) {
+        console.log('📩 Received:', message.type);
+        switch (message.type) {
+            case 'connected':
+                console.log('✅ Connected:', message.data);
+                if (playerId) sendToServer('auth', { userId: playerId });
+                break;
+            case 'authSuccess':
+                playerId = message.data.userId;
+                document.getElementById('currentUserDisplay').textContent = 'Player';
+                document.getElementById('headerBalance').textContent = formatMoney(message.data.balance || 0);
+                isRegistering = false; 
+                break;
+            case 'init':
+                playerId = message.data.playerId;
+                players = message.data.players || [];
+                gameState = { ...gameState, ...message.data.gameState };
+                updatePlayerUI();
+
+                if (window._pendingBotStake) {
+                    const stake = window._pendingBotStake;
+                    window._pendingBotStake = null;
+                    sendToServer('startSelection', { stake: stake });
+                    showPage('page-selection');
+                }
+                break;
+            case 'playersUpdate':
+                players = message.data;
+                updatePlayerUI();
+                break;
+            case 'gameStateUpdate':
+                gameState.status = message.data.status;
+                gameState.selectedCards = message.data.selectedCards || [];
+                gameState.selectionTimeLeft = message.data.selectionTimeLeft || 0;
+                gameState.stake = message.data.stake || 0;
+                gameState.gameNumber = message.data.gameNumber || 0;
+                players = message.data.players || players;
+                updatePlayerUI();
+                
+                if (gameState.status === 'selecting') {
+                    updateSelectionTimer();
+                }
+                
+                renderCards();
+                break;
+            case 'selectionTimer':
+                gameState.selectionTimeLeft = message.data.timeLeft;
+                updateSelectionTimer();
+                break;
+            case 'gameStart':
+                gameState.isPlaying = true;
+                gameState.status = 'playing';
+                gameState.gameNumber = message.data.gameNumber;
+                gameState.stake = message.data.stake;
+                gameState.totalCardsInPlay = message.data.totalCards;
+                currentGameCards = message.data.cards || [];
+                showPage('page-game');
+                isGameActive = true;
+                sliderIndex = 0;
+                sliderCards = currentGameCards.filter(c => c.playerId === playerId);
+                updateGameUI();
+                document.getElementById('gameStatusDisplay').textContent = '🔴 በጨዋታ ላይ';
+                playerStats.gamesPlayed++;
+                updateStatsUI();
+                break;
+            case 'numberCalled':
+                gameState.calledNumbers = message.data.calledNumbers || gameState.calledNumbers || [];
+                gameState.calledCount = message.data.calledCount || gameState.calledCount || 0;
+                const number = message.data.number;
+
+                if (message.data.cards) {
+                    currentGameCards = message.data.cards;
+                } else if (currentGameCards.length > 0) {
+                    currentGameCards.forEach(card => {
+                        if (!card.marked) card.marked = Array(5).fill().map(() => Array(5).fill(false));
+                        for (let r = 0; r < 5; r++) for (let c = 0; c < 5; c++) if (card.board[r][c] === number) card.marked[r][c] = true;
+                    });
+                }
+                updateGameUI();
+                break;
+            case 'gameEnd':
+                gameState.isPlaying = false;
+                gameState.status = 'ended';
+                isGameActive = false;
+                const winners = message.data.winners || [];
+                const prizePerWinner = message.data.prizePerWinner || 0;
+                if (winners.length > 0) {
+                    const currentWon = winners.some(w => w.playerId === playerId);
+                    if (currentWon) {
+                        playerStats.wins++;
+                        playerStats.totalWinnings += prizePerWinner;
+                        updateStatsUI();
+                    }
+                    showWinningOverlay(winners, prizePerWinner);
+                } else {
+                    showToast('😅 ምንም አሸናፊ የለም!', false);
+                    sendToServer('startSelection', { stake: gameState.stake });
+                    showPage('page-selection');
+                }
+                break;
+            case 'cardSelectionResult':
+                if (message.data.success) {
+                    sendToServer('getGameState', {});
+                } else {
+                    showToast(`❌ ${message.data.message}`, false);
+                }
+                break;
+            case 'gameError':
+                showToast(`⚠️ ${message.data.message}`, false);
+                break;
+        }
+    }
+
+    // ============================================================
+    // SELECTION TIMER
+    // ============================================================
+
+    function updateSelectionTimer() {
+        clearInterval(selectionTimer);
+
+        if (gameState.selectionTimeLeft <= 0 || gameState.status !== 'selecting') {
+            document.getElementById('selTimer').textContent = '60';
+            document.getElementById('selTimer').classList.remove('warning');
+            return;
+        }
+
+        document.getElementById('selTimer').textContent = gameState.selectionTimeLeft;
+
+        if (gameState.selectionTimeLeft <= 10) {
+            document.getElementById('selTimer').classList.add('warning');
+        } else {
+            document.getElementById('selTimer').classList.remove('warning');
+        }
+
+        selectionTimer = setInterval(() => {
+            gameState.selectionTimeLeft--;
+            
+            document.getElementById('selTimer').textContent = gameState.selectionTimeLeft;
+
+            if (gameState.selectionTimeLeft <= 10) {
+                document.getElementById('selTimer').classList.add('warning');
+            }
+
+            if (gameState.selectionTimeLeft <= 0) {
+                clearInterval(selectionTimer);
+                document.getElementById('selTimer').textContent = '0';
+                document.getElementById('selTimer').classList.add('warning');
+                
+                const playersWithCards = players.filter(p => p.cards && p.cards.length > 0);
+                
+                if (playersWithCards.length === 0) {
+                    showToast('⏳ ምንም ካርድ አልተመረጠም. በ10 ሰከንድ እንደገና እንጀምራለን...', false);
+                    
+                    setTimeout(() => {
+                        if (players) players.forEach(p => p.cards = []);
+                        gameState.selectionTimeLeft = 60;
+                        document.getElementById('selTimer').textContent = '60';
+                        document.getElementById('selTimer').classList.remove('warning');
+                        
+                        sendToServer('startSelection', { stake: gameState.stake });
+                        showPage('page-selection');
+                        renderCards();
+                    }, 10000);
+                } else {
+                    submitCards();
+                }
+            }
+        }, 1000);
+    }
+
+    // ============================================================
+    // HANDLE REGISTER BUTTON
+    // ============================================================
+
+    function handleRegister() {
+        autoRegisterOrLogin();
+    }
+
+    function loginWithTelegram() {
+        if (window.Telegram && window.Telegram.WebApp) {
+            autoRegisterOrLogin();
+            return;
+        }
+        window.open(`https://t.me/${CONFIG.BOT_USERNAME}`, '_blank');
+        showToast('📱 Please open the game from @M_bingo_bot for automatic login');
+    }
+
+    // ============================================================
+    // UPDATE UI
+    // ============================================================
+
+    function updatePlayerUI() {
+        const currentPlayer = players.find(p => p.id === playerId);
+        document.getElementById('headerBalance').textContent = formatMoney(currentPlayer?.balance || 0);
+        document.getElementById('playerCountDisplay').textContent = players.length || 0;
+        document.getElementById('currentUserDisplay').textContent = currentPlayer?.name || 'Not registered';
+        const totalCards = players.reduce((sum, p) => sum + (p.cards ? p.cards.length : 0), 0);
+        document.getElementById('totalCardsDisplay').textContent = totalCards;
+        const status = document.getElementById('gameStatusDisplay');
+        if (gameState.status === 'playing') status.textContent = '🔴 በጨዋታ ላይ';
+        else if (gameState.status === 'selecting') status.textContent = '🔄 ካርድ በመምረጥ ላይ...';
+        else if (gameState.status === 'ended') status.textContent = '🏆 ጨዋታ አልቋል';
+        else if (ws && ws.readyState === WebSocket.OPEN) status.textContent = '⏳ እየተጠበቀ';
+        else status.textContent = '❌ ግንኙነት የለም';
+
+        isAdmin = (CONFIG.ADMIN_IDS || []).includes(String(playerId));
+        const navBtn = document.getElementById('nav-admin-home');
+        const icon = document.getElementById('nav-admin-icon');
+        const label = document.getElementById('nav-admin-label');
+        if (isAdmin) {
+            navBtn.style.display = 'flex';
+            icon.textContent = '👑';
+            label.textContent = 'አስተዳዳሪ';
+        } else {
+            navBtn.style.display = 'none';
+        }
+    }
+
+    // ============================================================
+    // RENDER CARDS
+    // ============================================================
+
+    function renderCards() {
+        const container = document.getElementById('cardsContainer');
+        if (!container) {
+            console.error('❌ cardsContainer not found!');
+            return;
+        }
+        
+        container.innerHTML = '';
+        
+        if (!BOARDS || BOARDS.length === 0) {
+            container.innerHTML = '<div style="text-align:center;padding:20px;color:#999;">⏳ Loading cards...</div>';
+            return;
+        }
+        
+        const currentPlayer = players.find(p => p.id === playerId);
+        const takenCards = gameState.selectedCards || [];
+        
+        BOARDS.forEach((board, index) => {
+            const cardNum = index + 1;
+            const isSelected = currentPlayer && currentPlayer.cards && currentPlayer.cards.includes(cardNum);
+            const isTaken = takenCards.includes(cardNum) && !isSelected;
+            
+            const div = document.createElement('div');
+            div.className = 'card-item';
+            
+            if (isSelected) {
+                div.classList.add('selected');
+            } else if (isTaken) {
+                div.classList.add('taken');
+            }
+            
+            div.dataset.card = cardNum;
+            
+            let ownerName = '';
+            if (isTaken) {
+                const owner = players.find(p => p.cards && p.cards.includes(cardNum));
+                if (owner) ownerName = owner.name || 'Player';
+            }
+            
+            div.innerHTML = `
+                <div class="card-number">#${cardNum}</div>
+                <span class="card-owner">${isTaken ? '👤 ' + ownerName : isSelected ? '✅ ተመርጧል' : '⬜ ክፍት'}</span>
+            `;
+            
+            if (!isTaken && !isSelected) {
+                div.onclick = () => showCardPopup(cardNum, board);
+                div.style.cursor = 'pointer';
+            } else if (isTaken) {
+                div.onclick = () => showToast(`ካርድ #${cardNum} በ ${ownerName} ተመርጧል! (ተይዟል)`, false);
+                div.style.cursor = 'not-allowed';
+            } else {
+                div.onclick = () => showToast('ይህ ካርድ በእርስዎ ተመርጧል');
+                div.style.cursor = 'default';
+            }
+            
+            container.appendChild(div);
+        });
+    }
+
+    // ============================================================
+    // CARD POPUP
+    // ============================================================
+
+    function showCardPopup(cardNum, board) {
+        const currentPlayer = players.find(p => p.id === playerId);
+        const stake = gameState.stake || 0;
+        if (!currentPlayer || (currentPlayer.balance || 0) < stake) {
+            showToast('❌ በቂ ባላንስ የለዎትም! (You have insufficient balance!)', false);
+            return;
+        }
+
+        const popup = document.createElement('div');
+        popup.className = 'card-popup show';
+        popup.id = 'cardPopup';
+
+        let gridHtml = '';
+        board.forEach(row => {
+            row.forEach(num => {
+                const isStar = num === '★';
+                gridHtml += `<div class="popup-bingo-cell ${isStar ? 'free' : ''}">${isStar ? '⭐' : num}</div>`;
+            });
+        });
+
+        popup.innerHTML = `
+            <div class="popup-content">
+                <div style="background:orange; border-radius:50%; width:40px; height:40px; display:inline-flex; align-items:center; justify-content:center; font-weight:bold; color:white; margin-top:-40px; border:3px solid white;">${cardNum}</div>
+                <div style="display:grid; grid-template-columns:repeat(5,1fr); gap:6px; margin-top:10px;">
+                    <div style="background:#00FF00; padding:8px; border-radius:4px; color:white; font-weight:bold;">B</div>
+                    <div style="background:#FF0000; padding:8px; border-radius:4px; color:white; font-weight:bold;">I</div>
+                    <div style="background:#FFA500; padding:8px; border-radius:4px; color:white; font-weight:bold;">N</div>
+                    <div style="background:#0000FF; padding:8px; border-radius:4px; color:white; font-weight:bold;">G</div>
+                    <div style="background:#FF00FF; padding:8px; border-radius:4px; color:white; font-weight:bold;">O</div>
+                </div>
+                <div class="popup-bingo-grid">${gridHtml}</div>
+                <div style="display:flex; justify-content:space-between; padding:0 10px;">
+                    <button class="popup-btn popup-btn-accept" onclick="confirmCardSelection(${cardNum})">Accept</button>
+                    <button class="popup-btn popup-btn-cancel" onclick="closeCardPopup()">Cancel</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(popup);
+    }
+
+    function closeCardPopup() {
+        const popup = document.getElementById('cardPopup');
+        if (popup) popup.remove();
+    }
+
+    function confirmCardSelection(cardNum) {
+        closeCardPopup();
+
+        const currentPlayer = players.find(p => p.id === playerId);
+        if (!currentPlayer) { 
+            showToast('እባክዎን መጀመሪያ ይመዝገቡ', false);
+            return; 
+        }
+        
+        const stake = gameState.stake || 0;
+        if ((currentPlayer.balance || 0) < stake) {
+            showToast('❌ በቂ ባላንስ የለዎትም! (You have insufficient balance!)', false);
+            return;
+        }
+        
+        if (!currentPlayer.cards) currentPlayer.cards = [];
+        currentPlayer.cards.push(cardNum);
+        
+        document.getElementById('selStatus').textContent = `${currentPlayer.cards.length} ተመርጧል`;
+        
+        renderCards();
+        sendToServer('selectCard', { cardNumber: cardNum });
+    }
+
+    // ============================================================
+    // STAKE SELECTION
+    // ============================================================
+
+    function showStakeSelection(context) {
+        stakeContext = context || 'play';
+        document.querySelectorAll('.stake-btn').forEach(el => el.classList.remove('active'));
+        document.getElementById('stakeConfirmBtn').disabled = true;
+        selectedStake = 0;
+        showModal('stakeModal');
+    }
+
+    function selectStake(el) {
+        document.querySelectorAll('.stake-btn').forEach(e => e.classList.remove('active'));
+        el.classList.add('active');
+        selectedStake = parseInt(el.dataset.stake);
+        document.getElementById('stakeConfirmBtn').disabled = false;
+    }
+
+    function confirmStake() {
+        if (selectedStake <= 0) { showToast('እባክዎን ክምችት ይምረጡ', false); return; }
+        closeModal('stakeModal');
+        if (stakeContext === 'play') {
+            sendToServer('startSelection', { stake: selectedStake });
+            showPage('page-selection');
+        }
+    }
+
+    // ============================================================
+    // SUBMIT CARDS (UPDATED TO PREVENT STUCK STATE)
+    // ============================================================
+
+    function submitCards() {
+        const playersWithCards = players.filter(p => p.cards && p.cards.length > 0);
+        
+        if (playersWithCards.length === 0) {
+            showToast('⏳ ምንም ካርድ አልተመረጠም. በ10 ሰከንድ እንደገና እንጀምራለን...', false);
+            setTimeout(() => {
+                if (players) players.forEach(p => p.cards = []);
+                document.getElementById('selTimer').textContent = '60';
+                document.getElementById('selTimer').classList.remove('warning');
+                gameState.selectionTimeLeft = 60;
+                sendToServer('startSelection', { stake: gameState.stake });
+                renderCards();
+            }, 10000);
+            return;
+        }
+
+        sendToServer('startGame', {});
+
+        // ** UPDATED: Increased timeout to 15 seconds and resends `startGame` instead of going back to selection **
+        setTimeout(() => {
+           if (!isGameActive) {
+               showToast('⏳ ጨዋታው በመጀመር ላይ ነው... (Starting...)', false);
+               // Retry sending the start command
+               sendToServer('startGame', {});
+           }
+        }, 15000);
+    }
+
+    // ============================================================
+    // GAME FUNCTIONS
+    // ============================================================
+
+    function updateGameUI() {
+        document.getElementById('gameStake').textContent = gameState.stake + ' ብር';
+        const currentPlayer = players.find(p => p.id === playerId);
+        
+        const totalCardCount = currentGameCards.length; 
+        document.getElementById('gameCards').textContent = totalCardCount;
+        
+        const totalPrize = gameState.stake * gameState.totalCardsInPlay * 0.7;
+        document.getElementById('gameDerash').textContent = formatMoney(Math.round(totalPrize)) + ' ብር';
+        document.getElementById('gameCalled').textContent = `${gameState.calledCount || 0}/75`;
+        document.getElementById('gamePlayerName').textContent = `(${currentPlayer?.name || 'Player'})`;
+        
+        const container = document.getElementById('callItemsMini');
+        container.innerHTML = '';
+        const display = (gameState.calledNumbers || []).slice(-6);
+        if (display.length === 0) {
+            const empty = document.createElement('span');
+            empty.className = 'call-chip-mini empty';
+            empty.textContent = '⏳ ቁጥሮች እየተጠሩ ነው...';
+            container.appendChild(empty);
+        } else {
+            display.forEach((num, idx) => {
+                const letter = getLetterForNumber(num);
+                const chip = document.createElement('span');
+                chip.className = 'call-chip-mini called';
+                if (idx === display.length - 1) chip.classList.add('latest');
+                chip.textContent = `${letter}${num}`;
+                container.appendChild(chip);
+            });
+        }
+        
+        const playerCards = currentGameCards.filter(c => c.playerId === playerId);
+        if (playerCards.length > 0) {
+            sliderCards = playerCards;
+            if (sliderIndex >= sliderCards.length) sliderIndex = sliderCards.length - 1;
+            if (sliderIndex < 0) sliderIndex = 0;
+            renderSliderCard(sliderCards[sliderIndex], sliderIndex, sliderCards.length);
+        }
+    }
+
+    function renderSliderCard(card, index, total) {
+        const wrapper = document.getElementById('sliderCardWrapper');
+        if (!card) {
+            wrapper.innerHTML = '<div style="text-align:center;color:#999;padding:40px 0;">No cards</div>';
+            return;
+        }
+        const div = document.createElement('div');
+        div.className = 'user-card-display';
+        const title = document.createElement('div');
+        title.className = 'card-title';
+        title.textContent = `🎴 ካርድ #${card.cardNumber} ${card.bingo ? '🏆' : ''}`;
+        div.appendChild(title);
+        const header = document.createElement('div');
+        header.className = 'bingo-grid-header';
+        ['B', 'I', 'N', 'G', 'O'].forEach(letter => {
+            const span = document.createElement('span');
+            span.textContent = letter;
+            header.appendChild(span);
+        });
+        div.appendChild(header);
+        const grid = document.createElement('div');
+        grid.className = 'bingo-grid';
+        for (let r = 0; r < 5; r++) {
+            for (let c = 0; c < 5; c++) {
+                const cell = document.createElement('div');
+                cell.className = 'bingo-cell';
+                const val = card.board[r][c];
+                if (val === '★') { cell.textContent = '⭐'; cell.classList.add('free'); }
+                else { cell.textContent = val; }
+                if (card.marked && card.marked[r][c]) cell.classList.add('called');
+                if (card.bingo && card.winningPatterns) {
+                    let isWinning = false;
+                    for (const p of card.winningPatterns) {
+                        if (p.type === 'row' && p.index === r) isWinning = true;
+                        if (p.type === 'column' && p.index === c) isWinning = true;
+                        if (p.type === 'diagonal') {
+                            if (p.index === 0 && r === c) isWinning = true;
+                            if (p.index === 1 && r + c === 4) isWinning = true;
+                        }
+                        if (p.type === 'corner') {
+                            if ((r === 0 || r === 4) && (c === 0 || c === 4)) isWinning = true;
+                        }
+                    }
+                    if (isWinning) cell.classList.add('bingo');
+                }
+                grid.appendChild(cell);
+            }
+        }
+        div.appendChild(grid);
+        wrapper.innerHTML = '';
+        wrapper.appendChild(div);
+        document.getElementById('cardCounter').textContent = `${index + 1} / ${total}`;
+        document.getElementById('prevCardBtn').disabled = (index === 0);
+        document.getElementById('nextCardBtn').disabled = (index === total - 1);
+    }
+
+    function slideCard(direction) {
+        const total = sliderCards.length;
+        if (total === 0) return;
+        const newIndex = sliderIndex + direction;
+        if (newIndex < 0 || newIndex >= total) return;
+        sliderIndex = newIndex;
+        renderSliderCard(sliderCards[sliderIndex], sliderIndex, total);
+    }
+
+    // ============================================================
+    // WINNING OVERLAY
+    // ============================================================
+
+    function showWinningOverlay(winners, prizePerWinner) {
+        const overlay = document.getElementById('winningOverlay');
+        document.getElementById('winAmountDisplay').textContent = formatMoney(prizePerWinner);
+        const listContainer = document.getElementById('winnerListContainer');
+        listContainer.innerHTML = '';
+        let msg = '';
+        winners.forEach((w, idx) => {
+            const isCurrent = w.playerId === playerId;
+            const entry = document.createElement('div');
+            entry.className = 'winner-entry';
+            const patternLabels = w.patterns ? w.patterns.map(p => p.label).join(', ') : 'BINGO!';
+            entry.innerHTML = `
+                <span class="win-user">${w.playerName || 'Player'} ${isCurrent ? '⭐' : ''}</span>
+                <span class="win-card-num">#${w.cardNumber}</span>
+                <span class="win-pattern">${patternLabels}</span>
+                <span class="win-status">${isCurrent ? '🎉 አሸንፈዋል!' : '🏆'}</span>
+            `;
+            listContainer.appendChild(entry);
+            if (isCurrent) msg = '🎉 እንኳን ደስ አለዎት!';
+        });
+        document.getElementById('winningMessage').textContent = msg || '🏆 አሸናፊዎች ተገኝተዋል!';
+        const boardContainer = document.getElementById('winBoardContainer');
+        boardContainer.innerHTML = '';
+        const currentWinner = winners.find(w => w.playerId === playerId);
+        if (currentWinner) {
+            const grid = document.createElement('div');
+            grid.className = 'bingo-grid';
+            const board = currentWinner.board;
+            const marked = currentWinner.marked;
+            for (let r = 0; r < 5; r++) {
+                for (let c = 0; c < 5; c++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'bingo-cell';
+                    const val = board[r][c];
+                    if (val === '★') { cell.textContent = '⭐'; cell.classList.add('free'); }
+                    else { cell.textContent = val; }
+                    if (marked && marked[r][c]) cell.classList.add('called');
+                    let isWinning = false;
+                    if (currentWinner.patterns) {
+                        for (const p of currentWinner.patterns) {
+                            if (p.type === 'row' && p.index === r) isWinning = true;
+                            if (p.type === 'column' && p.index === c) isWinning = true;
+                            if (p.type === 'diagonal') {
+                                if (p.index === 0 && r === c) isWinning = true;
+                                if (p.index === 1 && r + c === 4) isWinning = true;
+                            }
+                            if (p.type === 'corner') {
+                                if ((r === 0 || r === 4) && (c === 0 || c === 4)) isWinning = true;
+                            }
+                        }
+                    }
+                    if (isWinning) cell.classList.add('bingo');
+                    grid.appendChild(cell);
+                }
+            }
+            boardContainer.appendChild(grid);
+        } else {
+            boardContainer.innerHTML = '<div style="color:#aaa;text-align:center;padding:12px;">የእርስዎ ካርድ አላሸነፈም</div>';
+        }
+        overlay.classList.add('show');
+        let countdown = 10;
+        const countdownEl = document.getElementById('winCountdown');
+        countdownEl.textContent = countdown;
+        clearInterval(winCountdownTimer);
+        winCountdownTimer = setInterval(() => {
+            countdown--;
+            countdownEl.textContent = countdown;
+            if (countdown <= 0) {
+                clearInterval(winCountdownTimer);
+                overlay.classList.remove('show');
+                sendToServer('startSelection', { stake: gameState.stake });
+                showPage('page-selection');
+            }
+        }, 1000);
+    }
+
+    function resetForNextGame() {
+        isGameActive = false;
+        gameState.isPlaying = false;
+        gameState.status = 'waiting';
+        currentGameCards = [];
+        sliderCards = [];
+        document.getElementById('gameStatusDisplay').textContent = '⏳ እየተጠበቀ';
+        showPage('page-menu');
+        updatePlayerUI();
+        updateStatsUI();
+    }
+
+    // ============================================================
+    // ADMIN FUNCTIONS - HTTP BASED
+    // ============================================================
+
+    function toggleAdminLogin() {
+        const panel = document.getElementById('adminPanel');
+        panel.classList.toggle('show');
+        if (panel.classList.contains('show') && adminState.isLoggedIn) {
+            fetchAdminData();
+        }
+    }
+
+    async function adminLogin() {
+        const username = document.getElementById('adminUsername').value.trim();
+        const password = document.getElementById('adminPassword').value.trim();
+        
+        if (!username || !password) {
+            document.getElementById('loginError').textContent = '❌ Please enter username and password';
+            return;
+        }
+        
+        try {
+            const response = await fetch(`${CONFIG.API_URL}/api/admin/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                mode: 'cors',
+                body: JSON.stringify({ username, password })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                adminState.isLoggedIn = true;
+                adminState.adminId = result.adminId || username;
+                document.getElementById('adminLogin').style.display = 'none';
+                document.getElementById('adminContent').style.display = 'block';
+                document.getElementById('adminBadge').style.display = 'inline';
+                document.getElementById('loginError').textContent = '';
+                showToast('✅ Admin logged in successfully!');
+                await fetchAdminData();
+            } else {
+                document.getElementById('loginError').textContent = '❌ ' + (result.message || 'Invalid credentials');
+            }
+        } catch (error) {
+            console.error('Admin login error:', error);
+            document.getElementById('loginError').textContent = '❌ Connection error. Please try again.';
+        }
+    }
+
+    async function fetchAdminData() {
+        if (!adminState.isLoggedIn) return;
+        
+        try {
+            const [playersRes, depositsRes, withdrawalsRes] = await Promise.all([
+                fetch(`${CONFIG.API_URL}/api/admin/data?adminId=${adminState.adminId}`, { mode: 'cors' }),
+                fetch(`${CONFIG.API_URL}/api/admin/deposits?adminId=${adminState.adminId}`, { mode: 'cors' }),
+                fetch(`${CONFIG.API_URL}/api/admin/withdrawals?adminId=${adminState.adminId}`, { mode: 'cors' })
+            ]);
+
+            const playersData = await playersRes.json();
+            const depositsData = await depositsRes.json();
+            const withdrawalsData = await withdrawalsRes.json();
+            
+            if (playersData.success) {
+                renderAdminPanel(playersData);
+            }
+            renderAdminDeposits(depositsData);
+            renderAdminWithdrawals(withdrawalsData);
+
+            renderAdminPagePlayers(playersData);
+            renderAdminPageRequests(depositsData, withdrawalsData);
+            renderAdminPageLaser(playersData);
+            renderAdminPageUserControl(playersData);
+
+            const totalPending = (depositsData?.length || 0) + (withdrawalsData?.length || 0);
+            const badge = document.getElementById('requestBadge');
+            if (totalPending > 0) {
+                badge.style.display = 'inline';
+                badge.textContent = totalPending;
+            } else {
+                badge.style.display = 'none';
+            }
+
+            try {
+                const statsRes = await fetch(`${CONFIG.API_URL}/api/admin/stats?adminId=${adminState.adminId}`, { mode: 'cors' });
+                const stats = await statsRes.json();
+                if (stats.totalStakes !== undefined) {
+                    document.getElementById('laserTotalStakes').textContent = formatMoney(stats.totalStakes || 0);
+                    const houseCut = (stats.totalStakes || 0) * 0.3;
+                    document.getElementById('laserHouseCut').textContent = formatMoney(houseCut);
+                    const winnerShare = (stats.totalStakes || 0) * 0.7;
+                    document.getElementById('laserWinnerShare').textContent = formatMoney(winnerShare);
+                }
+            } catch (e) { console.warn('Laser stats not available'); }
+
+        } catch (error) {
+            console.error('Error fetching admin data:', error);
+            showToast('❌ Connection error', false);
+        }
+    }
+
+    function renderAdminPagePlayers(data) {
+        const container = document.getElementById('adminPlayersList');
+        if (!data || !data.players || data.players.length === 0) {
+            container.innerHTML = '<div class="text-muted text-sm">ምንም ተጫዋቾች የሉም</div>';
+            return;
+        }
+        
+        let sortedPlayers = [...data.players].sort((a, b) => {
+            const aOnline = (a.status === 'ONLINE');
+            const bOnline = (b.status === 'ONLINE');
+            return (bOnline - aOnline);
+        });
+
+        let html = '';
+        sortedPlayers.slice(0, 20).forEach(p => {
+            const activeBadge = (p.status === 'ONLINE') 
+                ? '<span class="badge badge-success">✅ Active</span>' 
+                : '<span class="badge badge-warning">❌ Offline</span>';
+            html += `<div class="entry">👤 ${p.name || 'Player'} (${formatMoney(p.balance)} ብር) ${activeBadge}</div>`;
+        });
+        container.innerHTML = html;
+    }
+
+    function renderAdminPageRequests(deposits, withdrawals) {
+        const container = document.getElementById('adminRequestsList');
+        let html = '';
+        if (deposits && deposits.length > 0) {
+            html += '<div style="font-weight:700;color:var(--green);">📥 የገንዘብ አስገባት (Deposits)</div>';
+            deposits.slice(0, 5).forEach(d => {
+                html += `<div class="entry">👤 ${d.userName}: ${formatMoney(d.amount)} ብር <button class="btn btn-sm btn-success" onclick="approveDeposit('${d.id}')">✅</button> <button class="btn btn-sm btn-danger" onclick="rejectDeposit('${d.id}')">❌</button></div>`;
+            });
+        }
+        if (withdrawals && withdrawals.length > 0) {
+            html += '<div style="font-weight:700;color:var(--red);margin-top:6px;">📤 የገንዘብ ውጣት (Withdrawals)</div>';
+            withdrawals.slice(0, 5).forEach(w => {
+                html += `<div class="entry">👤 ${w.userName}: ${formatMoney(w.amount)} ብር <button class="btn btn-sm btn-success" onclick="approveWithdrawal('${w.id}')">✅</button> <button class="btn btn-sm btn-danger" onclick="rejectWithdrawal('${w.id}')">❌</button></div>`;
+            });
+        }
+        if (!html) html = '<div class="text-muted text-sm">ምንም ጥያቄ የለም</div>';
+        container.innerHTML = html;
+    }
+
+    function renderAdminPageUserControl(data) {
+        const container = document.getElementById('userControlList');
+        if (!data || !data.players || data.players.length === 0) {
+            container.innerHTML = '<div class="text-muted text-sm">ምንም ተጫዋቾች የሉም</div>';
+            return;
+        }
+        
+        let sortedPlayers = [...data.players].sort((a, b) => {
+            const aOnline = (a.status === 'ONLINE');
+            const bOnline = (b.status === 'ONLINE');
+            return (bOnline - aOnline);
+        });
+
+        let html = '';
+        sortedPlayers.slice(0, 50).forEach(p => {
+            const status = p.is_banned ? '🚫 ታግዷል' : '✅ ንቁ';
+            const controlBtn = p.is_banned
+                ? `<button class="btn btn-sm btn-success" onclick="adminBan('${p.id}', false)">✅ ገደብ አንሳ</button>`
+                : `<button class="btn btn-sm btn-danger" onclick="adminBan('${p.id}', true)">🚫 አግድ</button>`;
+            html += `<div class="entry" data-name="${(p.name || '').toLowerCase()}">${p.name || 'Player'} (${p.telegram_id}) - ${status} ${controlBtn}</div>`;
+        });
+        container.innerHTML = html;
+        
+        const searchInput = document.getElementById('userSearchInput');
+        if (searchInput) {
+            searchInput.oninput = function() {
+                const query = this.value.toLowerCase();
+                const items = container.querySelectorAll('.entry');
+                items.forEach(item => {
+                    const text = item.getAttribute('data-name') || '';
+                    item.style.display = text.includes(query) ? 'block' : 'none';
+                });
+            };
+        }
+    }
+
+    function renderAdminPanel(data) {
+        const container = document.getElementById('adminRequests');
+        if (!data || !data.players || data.players.length === 0) {
+            container.innerHTML = '<div class="text-muted text-sm text-center">ምንም ተጫዋቾች የሉም</div>';
+            return;
+        }
+        
+        let html = '';
+        data.players.forEach(p => {
+            const banBtn = p.is_banned 
+                ? `<button class="btn btn-sm btn-success" onclick="adminBan('${p.id}', false)">🟢 ፍቀድ</button>` 
+                : `<button class="btn btn-sm btn-danger" onclick="adminBan('${p.id}', true)">🚫 አግድ</button>`;
+            
+            html += `
+                <div class="admin-request" style="background:#F5F5F5;border-radius:12px;padding:12px;margin-bottom:10px;border-left:4px solid var(--gold);">
+                    <div style="font-weight:700;font-size:13px;">👤 ${p.name || 'Player'} ${p.is_banned ? '<span class="badge badge-danger">BANNED</span>' : ''}</div>
+                    <div style="font-size:12px;color:#555;">🆔 ${p.id}</div>
+                    <div style="font-size:12px;color:#555;">💰 ብር: ${formatMoney(p.balance)}</div>
+                    <div style="font-size:12px;color:#555;">🎴 Cards: ${p.cards?.length || 0}</div>
+                    <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
+                        <button class="btn btn-sm btn-success" onclick="adminDeposit('${p.id}')">💰 + Add</button>
+                        <button class="btn btn-sm btn-danger" onclick="adminWithdraw('${p.id}')">💰 - Remove</button>
+                        ${banBtn}
+                        <button class="btn btn-sm btn-primary" onclick="adminInfo('${p.id}')">ℹ️ ዝርዝር</button>
+                    </div>
+                </div>
+            `;
+        });
+        container.innerHTML = html;
+    }
+
+    function renderAdminDeposits(data) {
+        const container = document.getElementById('adminDeposits');
+        if (!data || data.length === 0) {
+            container.innerHTML = '<div class="text-muted text-sm text-center">No Pending Deposits</div>';
+            return;
+        }
+        
+        let html = '';
+        data.forEach(d => {
+            html += `
+                <div style="background:#E8F5E9;border-radius:8px;padding:10px;margin-bottom:8px;border-left:4px solid var(--green);">
+                    <div><strong>${d.userName}</strong> (${d.userId})</div>
+                    <div>💰 Amount: ${formatMoney(d.amount)} Birr</div>
+                    <div>📝 Method: ${d.method}</div>
+                    <div>🆔 Txn: ${d.reference || 'N/A'}</div>
+                    <div style="margin-top:6px;"><span class="badge badge-warning">Status: PENDING</span></div>
+                    <div class="flex-between mt-8">
+                        <button class="btn btn-sm btn-success" onclick="approveDeposit('${d.id}')">✅ Approve</button>
+                        <button class="btn btn-sm btn-danger" onclick="rejectDeposit('${d.id}')">❌ Reject</button>
+                    </div>
+                </div>
+            `;
+        });
+        container.innerHTML = html;
+    }
+
+    function renderAdminWithdrawals(data) {
+        const container = document.getElementById('adminWithdrawals');
+        if (!data || data.length === 0) {
+            container.innerHTML = '<div class="text-muted text-sm text-center">No Pending Withdrawals</div>';
+            return;
+        }
+        
+        let html = '';
+        data.forEach(w => {
+            html += `
+                <div style="background:#FFEBEE;border-radius:8px;padding:10px;margin-bottom:8px;border-left:4px solid var(--red);">
+                    <div><strong>${w.userName}</strong> (${w.userId})</div>
+                    <div>💰 Amount: ${formatMoney(w.amount)} Birr</div>
+                    <div>📝 Method: ${w.method}</div>
+                    <div>🏦 Account: ${w.destination || 'N/A'}</div>
+                    <div style="margin-top:6px;"><span class="badge badge-warning">Status: PENDING</span></div>
+                    <div class="flex-between mt-8">
+                        <button class="btn btn-sm btn-success" onclick="approveWithdrawal('${w.id}')">✅ Approve</button>
+                        <button class="btn btn-sm btn-danger" onclick="rejectWithdrawal('${w.id}')">❌ Reject</button>
+                    </div>
+                </div>
+            `;
+        });
+        container.innerHTML = html;
+    }
+
+    async function rejectDeposit(depositId) {
+        try {
+            const reason = prompt('Enter rejection reason:', 'Rejected by Admin');
+            const response = await fetch(`${CONFIG.API_URL}/api/admin/deposits/reject`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                mode: 'cors',
+                body: JSON.stringify({ adminId: adminState.adminId, depositId: depositId, reason: reason })
+            });
+            const result = await response.json();
+            if (result.success) {
+                showToast('✅ Deposit Rejected!');
+                await fetchAdminData();
+            } else {
+                showToast('❌ ' + (result.error || 'Failed to reject'), false);
+            }
+        } catch (error) {
+            console.error('Admin reject error:', error);
+            showToast('❌ Connection error', false);
+        }
+    }
+
+    async function adminBan(playerId, isBan) {
+        try {
+            const action = isBan ? 'ban' : 'unban';
+            const response = await fetch(`${CONFIG.API_URL}/api/admin/action`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                mode: 'cors',
+                body: JSON.stringify({
+                    adminId: adminState.adminId,
+                    action: action,
+                    playerId: playerId
+                })
+            });
+            const result = await response.json();
+            if (result.success) {
+                showToast(`✅ User ${isBan ? 'Banned' : 'Unbanned'} successfully!`);
+                await fetchAdminData();
+            } else {
+                showToast('❌ ' + (result.message || 'Failed to update user'), false);
+            }
+        } catch (error) {
+            console.error('Admin ban error:', error);
+            showToast('❌ Connection error', false);
+        }
+    }
+
+    async function adminInfo(playerId) {
+        try {
+            const response = await fetch(`${CONFIG.API_URL}/api/admin/user/${playerId}?adminId=${adminState.adminId}`, { mode: 'cors' });
+            const result = await response.json();
+            
+            if (result.success) {
+                const u = result.user;
+                let txnHtml = '';
+                result.transactions.forEach(t => {
+                    txnHtml += `<div style="font-size:12px;border-bottom:1px solid #ddd;padding:4px 0;">${t.type}: ${formatMoney(t.amount)} (Before: ${formatMoney(t.balance_before)})</div>`;
+                });
+
+                document.getElementById('userInfoModal').innerHTML = `
+                    <div class="modal-content">
+                        <div class="modal-title">👤 የተጠቃሚ መረጃ</div>
+                        <div style="font-size:14px;">
+                            <div><strong>ስም:</strong> ${u.first_name}</div>
+                            <div><strong>Username:</strong> ${u.username || 'N/A'}</div>
+                            <div><strong>Telegram ID:</strong> ${u.telegram_id}</div>
+                            <div><strong>ባላንስ:</strong> ${formatMoney(u.balance)} ብር</div>
+                            <div><strong>የተቆለፈ:</strong> ${formatMoney(u.locked_balance)} ብር</div>
+                            <div><strong>ጨዋታዎች:</strong> ${u.total_games_played}</div>
+                            <div><strong>ድሎች:</strong> ${u.total_wins}</div>
+                            <div><strong>ጠቅላላ ድል:</strong> ${formatMoney(u.total_winnings)} ብር</div>
+                            <div><strong>የተመዘገበው:</strong> ${new Date(u.created_at).toLocaleDateString()}</div>
+                            <div><strong>የመጨረሻ ግባ:</strong> ${new Date(u.last_login).toLocaleString()}</div>
+                        </div>
+                        <div class="mt-12">
+                            <div style="font-weight:700;margin-bottom:6px;">📜 የቅርብ ግብይቶች</div>
+                            ${txnHtml || '<div class="text-muted">No transactions</div>'}
+                        </div>
+                        <button class="btn btn-outline mt-12" onclick="closeModal('userInfoModal')">✖ ዝጋ</button>
+                    </div>
+                `;
+                showModal('userInfoModal');
+            } else {
+                showToast('❌ Failed to fetch user info', false);
+            }
+        } catch (error) {
+            console.error('Admin info error:', error);
+            showToast('❌ Connection error', false);
+        }
+    }
+
+    async function approveDeposit(depositId) {
+        try {
+            const response = await fetch(`${CONFIG.API_URL}/api/admin/deposits/approve`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                mode: 'cors',
+                body: JSON.stringify({ adminId: adminState.adminId, depositId: depositId })
+            });
+            const result = await response.json();
+            if (result.success) {
+                showToast('✅ Deposit Approved!');
+                await fetchAdminData();
+            } else {
+                showToast('❌ ' + (result.error || 'Failed to approve'), false);
+            }
+        } catch (error) {
+            console.error('Admin approve error:', error);
+            showToast('❌ Connection error', false);
+        }
+    }
+
+    async function approveWithdrawal(withdrawalId) {
+        try {
+            const response = await fetch(`${CONFIG.API_URL}/api/admin/withdrawals/approve`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                mode: 'cors',
+                body: JSON.stringify({ adminId: adminState.adminId, withdrawalId: withdrawalId })
+            });
+            const result = await response.json();
+            if (result.success) {
+                showToast('✅ Withdrawal Approved!');
+                await fetchAdminData();
+            } else {
+                showToast('❌ ' + (result.error || 'Failed to approve'), false);
+            }
+        } catch (error) {
+            console.error('Admin approve error:', error);
+            showToast('❌ Connection error', false);
+        }
+    }
+
+    async function rejectWithdrawal(withdrawalId) {
+        try {
+            const reason = prompt('Enter rejection reason:', 'Rejected by Admin');
+            const response = await fetch(`${CONFIG.API_URL}/api/admin/withdrawals/reject`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                mode: 'cors',
+                body: JSON.stringify({ adminId: adminState.adminId, withdrawalId: withdrawalId, reason: reason })
+            });
+            const result = await response.json();
+            if (result.success) {
+                showToast('✅ Withdrawal Rejected!');
+                await fetchAdminData();
+            } else {
+                showToast('❌ ' + (result.error || 'Failed to reject'), false);
+            }
+        } catch (error) {
+            console.error('Admin reject error:', error);
+            showToast('❌ Connection error', false);
+        }
+    }
+
+    async function adminDeposit(playerId) {
+        const amount = prompt('Enter deposit amount (ብር):', '100');
+        if (!amount || isNaN(amount) || parseInt(amount) <= 0) {
+            showToast('❌ Invalid amount', false);
+            return;
+        }
+        
+        try {
+            const response = await fetch(`${CONFIG.API_URL}/api/admin/action`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                mode: 'cors',
+                body: JSON.stringify({
+                    adminId: adminState.adminId,
+                    action: 'deposit',
+                    playerId: playerId,
+                    amount: parseInt(amount)
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                showToast(`✅ Added ${amount} Birr to player! New balance: ${result.newBalance}`);
+                await fetchAdminData();
+            } else {
+                showToast('❌ ' + (result.message || 'Failed to add balance'), false);
+            }
+        } catch (error) {
+            console.error('Admin deposit error:', error);
+            showToast('❌ Connection error', false);
+        }
+    }
+
+    async function adminWithdraw(playerId) {
+        const amount = prompt('Enter withdrawal amount (ብር):', '50');
+        if (!amount || isNaN(amount) || parseInt(amount) <= 0) {
+            showToast('❌ Invalid amount', false);
+            return;
+        }
+        
+        if (!confirm(`Are you sure you want to remove ${amount} Birr from this player?`)) return;
+        
+        try {
+            const response = await fetch(`${CONFIG.API_URL}/api/admin/action`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                mode: 'cors',
+                body: JSON.stringify({
+                    adminId: adminState.adminId,
+                    action: 'withdraw',
+                    playerId: playerId,
+                    amount: parseInt(amount)
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                showToast(`✅ Removed ${amount} Birr from player! New balance: ${result.newBalance}`);
+                await fetchAdminData();
+            } else {
+                showToast('❌ ' + (result.message || 'Failed to remove balance'), false);
+            }
+        } catch (error) {
+            console.error('Admin withdraw error:', error);
+            showToast('❌ Connection error', false);
+        }
+    }
+
+    function adminLogout() {
+        adminState.isLoggedIn = false;
+        adminState.adminId = null;
+        document.getElementById('adminLogin').style.display = 'block';
+        document.getElementById('adminContent').style.display = 'none';
+        document.getElementById('adminBadge').style.display = 'none';
+        document.getElementById('adminUsername').value = '';
+        document.getElementById('adminPassword').value = '';
+        document.getElementById('loginError').textContent = '';
+        showToast('👋 Logged out');
+        updatePlayerUI();
+    }
+
+    // ============================================================
+    // DEPOSIT / WITHDRAW / TRANSFER / INVITE
+    // ============================================================
+
+    function showDeposit() { showModal('depositModal'); }
+    function showWithdraw() { showModal('withdrawModal'); }
+    function showTransfer() { showModal('transferModal'); }
+    function showInvite() { showModal('inviteModal'); }
+
+    async function submitDeposit() {
+        const amount = parseInt(document.getElementById('depositAmount').value);
+        const txnId = document.getElementById('depositTxnId').value.trim();
+        if (!amount || amount < 50 || amount > 5000) { showToast('Invalid amount', false); return; }
+        if (!txnId) { showToast('Enter Txn ID', false); return; }
+        
+        closeModal('depositModal');
+        showToast('⏳ Request sent. Waiting for Admin approval...');
+        
+        const result = await apiRequest('/api/deposit/request', {
+            method: 'POST',
+            body: JSON.stringify({ userId: playerId, amount: amount, method: 'bank', txnId: txnId })
+        });
+        
+        if (result.success) {
+            const interval = setInterval(async () => {
+                const wallet = await apiRequest(`/api/wallet/${playerId}`);
+                if (wallet.balance >= (parseInt(document.getElementById('headerBalance').textContent) || 0)) {
+                    clearInterval(interval);
+                    showToast(`✅ ${amount} Birr successfully deposited!`, true);
+                    showStakeSelection('play');
+                }
+            }, 3000);
+        }
+    }
+
+    function submitWithdraw() {
+        const amount = parseInt(document.getElementById('withdrawAmount').value);
+        const method = document.getElementById('withdrawMethod').value;
+        const address = document.getElementById('withdrawAddress').value.trim();
+        const currentPlayer = players.find(p => p.id === playerId);
+        if (!amount || amount <= 0) { showToast('እባክዎን ትክክለኛ መጠን ያስገቡ', false); return; }
+        if (amount > (currentPlayer?.balance || 0)) {
+            showToast(`⚠️ በቂ ገንዘብ የለዎትም! ${formatMoney(currentPlayer?.balance || 0)} ብር አለዎት.`, false);
+            return;
+        }
+        if (!address) { showToast('እባክዎን አድራሻ ያስገቡ', false); return; }
+        sendToServer('adminAction', { action: 'withdraw', playerId: playerId, amount: amount, method: method, address: address });
+        document.getElementById('withdrawStatus').innerHTML = `
+            <span style="color: var(--gold-dark);">
+                ✅ የመውጫ ጥያቄ ተልኳል! ${formatMoney(amount)} ብር ወደ ${address} ይላካል.
+            </span>
+        `;
+        setTimeout(() => closeModal('withdrawModal'), 3000);
+    }
+
+    function confirmTransfer() {
+        const amount = parseInt(document.getElementById('transferAmount').value);
+        const phone = document.getElementById('transferPhone').value.trim();
+        const currentPlayer = players.find(p => p.id === playerId);
+        if (!amount || amount <= 0) { showToast('እባክዎን ትክክለኛ መጠን ያስገቡ', false); return; }
+        if (amount > (currentPlayer?.balance || 0)) {
+            showToast(`⚠️ በቂ ገንዘብ የለዎትም! ${formatMoney(currentPlayer?.balance || 0)} ብር አለዎት.`, false);
+            return;
+        }
+        if (!phone || phone.length < 10) { showToast('እባክዎን ትክክለኛ ስልክ ቁጥር ያስገቡ', false); return; }
+        if (!confirm(`${formatMoney(amount)} ብር ወደ ${phone} መላክ እርግጠኛ ነዎት?`)) return;
+        sendToServer('adminAction', { action: 'transfer', playerId: playerId, amount: amount, phone: phone });
+        closeModal('transferModal');
+    }
+
+    function copyReferral() {
+        const code = document.getElementById('referralCode').textContent || 'LIYU789';
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(code).then(() => showToast('✅ ኮዱ ተቀድቷል!'));
+        } else {
+            const input = document.createElement('input');
+            input.value = code;
+            document.body.appendChild(input);
+            input.select();
+            document.execCommand('copy');
+            document.body.removeChild(input);
+            showToast('✅ ኮዱ ተቀድቷል!');
+        }
+    }
+
+    // ============================================================
+    // SETUP MODALS
+    // ============================================================
+
+    function setupModals() {
+        document.getElementById('depositModal').innerHTML = `
+            <div class="modal-content">
+                <div class="modal-title">💰 ገንዘብ አስገባ</div>
+                <div class="form-group"><label>መጠን (50-5000 ብር)</label><input type="number" id="depositAmount" min="50" max="5000" placeholder="ለምሳሌ 100"></div>
+                <div style="background:#F5F5F5;border-radius:12px;padding:12px;margin:12px 0;">
+                    <div style="font-weight:700;font-size:14px;">🏦 የክፍያ መረጃ (ባንክ ብቻ)</div>
+                    <div style="font-size:13px;margin-top:6px;">
+                        <div>🏛️ ባንክ ሂሳብ: <strong>1000070045207</strong></div>
+                        <div>👤 ስም: <strong>Frezer Abiy</strong></div>
+                    </div>
+                </div>
+                <div class="form-group"><label>የግብይት መታወቂያ</label><input type="text" id="depositTxnId" placeholder="ቁጥሩን ያስገቡ"></div>
+                <button class="btn btn-gold" onclick="submitDeposit()">✅ አስገባ</button>
+                <button class="btn btn-outline mt-8" onclick="closeModal('depositModal')">✖ ዝጋ</button>
+            </div>
+        `;
+        document.getElementById('withdrawModal').innerHTML = `
+            <div class="modal-content">
+                <div class="modal-title">🏦 ገንዘብ አውጣ</div>
+                <div class="form-group"><label>መጠን (ብር)</label><input type="number" id="withdrawAmount" placeholder="መጠን ያስገቡ"></div>
+                <div class="form-group"><label>የመውጫ ዘዴ</label>
+                    <select id="withdrawMethod">
+                        <option value="bank">ባንክ</option>
+                        <option value="cbe">ሲቢኢ ብር</option>
+                    </select>
+                </div>
+                <div class="form-group"><label>አድራሻ</label><input type="text" id="withdrawAddress" placeholder="አድራሻ ያስገቡ"></div>
+                <div class="flex-between">
+                    <button class="btn btn-primary" style="flex:1;" onclick="submitWithdraw()">✅ አስገባ</button>
+                    <button class="btn btn-outline" style="flex:1;" onclick="closeModal('withdrawModal')">✖ ዝጋ</button>
+                </div>
+                <div id="withdrawStatus" class="mt-8 text-center text-sm text-muted"></div>
+            </div>
+        `;
+        document.getElementById('transferModal').innerHTML = `
+            <div class="modal-content">
+                <div class="modal-title">🔄 ገንዘብ አስተላልፍ</div>
+                <div class="form-group"><label>መጠን (ብር)</label><input type="number" id="transferAmount" placeholder="መጠን ያስገቡ"></div>
+                <div class="form-group"><label>የተቀባይ ስልክ ቁጥር</label><input type="text" id="transferPhone" placeholder="09xxxxxxxx"></div>
+                <button class="btn btn-gold" onclick="confirmTransfer()">📤 ላክ</button>
+                <button class="btn btn-outline mt-8" onclick="closeModal('transferModal')">✖ ዝጋ</button>
+            </div>
+        `;
+        document.getElementById('inviteModal').innerHTML = `
+            <div class="modal-content">
+                <div class="modal-title">👥 ጋብዝ እና ቦነስ</div>
+                <div style="text-align:center;padding:16px 0;">
+                    <div style="font-size:48px;">🎁</div>
+                    <div style="font-size:18px;font-weight:700;margin:8px 0;">20 ብር ቦነስ ያግኙ!</div>
+                    <div class="text-muted text-sm">ሌሎችን ሲጋብዙ እና ሲቀመጡ 20 ብር ያገኛሉ</div>
+                    <div style="background:#F5F5F5;border-radius:12px;padding:16px;margin:12px 0;">
+                        <div style="font-weight:700;">የእርስዎ የማጣቀሻ ኮድ</div>
+                        <div style="font-size:24px;font-weight:900;color:var(--primary);" id="referralCode">LIYU789</div>
+                    </div>
+                    <button class="btn btn-primary" onclick="copyReferral()">📋 ኮዱን ቅዳ</button>
+                </div>
+                <button class="btn btn-outline mt-8" onclick="closeModal('inviteModal')">✖ ዝጋ</button>
+            </div>
+        `;
+    }
+
+    // ============================================================
+    // INITIALIZATION
+    // ============================================================
+
+    function init() {
+        console.log('🎯 M-BINGO Production');
+        console.log(`🔗 API: ${CONFIG.API_URL}`);
+        console.log(`📡 WebSocket: ${CONFIG.WS_URL}`);
+        console.log(`🌐 Frontend: ${CONFIG.FRONTEND_URL}`);
+        
+        const params = new URLSearchParams(window.location.search);
+        const stakeParam = params.get('stake');
+        const userIdParam = params.get('userId');
+        const modeParam = params.get('mode');
+
+        if (userIdParam) {
+            playerId = userIdParam; 
+            localStorage.setItem('mbingo_playerId', playerId);
+        }
+
+        if (modeParam === 'deposit') {
+            showDeposit();
+        } else if (modeParam === 'withdraw') {
+            showWithdraw();
+        } else if (modeParam === 'transfer') {
+            showTransfer();
+        } else if (stakeParam && userIdParam) {
+            gameState.stake = parseInt(stakeParam);
+            document.getElementById('selStake').textContent = gameState.stake + ' ብር';
+            window._pendingBotStake = parseInt(stakeParam);
+            showPage('page-selection');
+        }
+
+        loadCardsFromAPI().then(() => {
+            console.log('✅ Cards ready, initializing...');
+            renderCards();
+        });
+        
+        connectWebSocket();
+        updateStatsUI();
+        setupModals();
+
+        if (!userIdParam) {
+            setTimeout(autoRegisterOrLogin, 500);
+        } else {
+            setTimeout(() => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    sendToServer('auth', { userId: playerId });
+                    updatePlayerUI();
+                }
+            }, 1000);
+        }
+        
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && (!ws || ws.readyState !== WebSocket.OPEN)) {
+                connectWebSocket();
+            }
+        });
+        
+        console.log('✅ M-BINGO initialized!');
+        console.log('📍 Share: https://t.me/M_bingo_bot');
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
+    </script>
+
+</body>
+</html>
