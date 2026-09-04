@@ -143,7 +143,7 @@ async function startGame(roomId) {
 
     const sequence = shuffled75();
     const gameNumber = Number(room.game_number || 0) + 1;
-    const prizePool = Math.round(totalStake * 0.70 * 100) / 100;
+    const prizePool = Math.round(totalStake * 0.80 * 100) / 100;
 
     await client.query(
       `UPDATE rooms
