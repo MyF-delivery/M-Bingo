@@ -1680,41 +1680,51 @@
         sendToServer('getLobbyData', {});
     }
 
-    function renderLobby(data) {
-        const container = document.getElementById('lobby-rooms-container');
-        container.innerHTML = '';
-        // Define default rooms
-        let rooms = [
-            { stake: 10 },
-            { stake: 20 },
-            { stake: 50 }
-        ];
-        
-        // Merge actual data from server
-        rooms.forEach(room => {
-            const serverData = data.find(r => r.stake === room.stake) || {};
-            const noCards = serverData.selectedCardsCount || 0;
-            const playersCount = serverData.playersCount || 0;
-            const winAmount = Math.round(noCards * room.stake * 0.8);
-            const status = serverData.status || 'waiting';
-            
-            const roomCard = document.createElement('div');
-            roomCard.className = 'room-card';
-            roomCard.innerHTML = `
-                <div class="room-top">
-                    <div class="room-stake">${room.stake} ETB</div>
-                    <button class="room-join-btn" onclick="joinRoom(${room.stake})">JOIN</button>
-                </div>
-                <div class="room-info">
-                    <div class="room-item"><span>👥 ${noCards} ካርዶች ተመርጠዋል</span></div>
-                    <div class="room-item"><span>💰 ${winAmount} ETB</span></div>
-                    <div class="room-item"><span>⏳ ${status === 'playing' ? 'በጨዋታ ላይ' : '60s'}</span></div>
-                </div>
-            `;
-            container.appendChild(roomCard);
-        });
-    }
+function renderLobby(data) {
+    const container = document.getElementById('lobby-rooms-container');
+    container.innerHTML = '';
+    // Define the three stake levels
+    const rooms = [
+        { stake: 10 },
+        { stake: 20 },
+        { stake: 50 }
+    ];
 
+    rooms.forEach(room => {
+        const serverData = data.find(r => r.stake === room.stake) || {};
+        const noCards = serverData.selectedCardsCount || 0;
+        const winAmount = Math.round(noCards * room.stake * 0.8);
+        const status = serverData.status || 'waiting';
+        const timeLeft = serverData.selectionTimeLeft || 0;
+
+        // Determine display text
+        let statusDisplay = '';
+        if (status === 'waiting') {
+            statusDisplay = (noCards === 0) ? '⏳ Wait' : '⏳ Selecting...';
+        } else if (status === 'selecting') {
+            statusDisplay = `⏳ ${timeLeft}s`;
+        } else if (status === 'playing') {
+            statusDisplay = '🔴 In Game';
+        } else {
+            statusDisplay = '⏳ Wait';
+        }
+
+        const roomCard = document.createElement('div');
+        roomCard.className = 'room-card';
+        roomCard.innerHTML = `
+            <div class="room-top">
+                <div class="room-stake">${room.stake} ETB</div>
+                <button class="room-join-btn" onclick="joinRoom(${room.stake})">JOIN</button>
+            </div>
+            <div class="room-info">
+                <div class="room-item"><span>👥 ${noCards} ካርዶች ተመርጠዋል</span></div>
+                <div class="room-item"><span>💰 ${winAmount} ETB</span></div>
+                <div class="room-item"><span>${statusDisplay}</span></div>
+            </div>
+        `;
+        container.appendChild(roomCard);
+    });
+}
     // ============================================================
     // FIXED: joinRoom always starts selection
     // ============================================================
