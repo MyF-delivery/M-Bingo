@@ -1,0 +1,1981 @@
+<!DOCTYPE html>
+<html lang="am">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ቢንጎ ጨዋታ · Multiplayer</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Ethiopic:wght@400;700;900&display=swap');
+        :root {
+            --primary: #8B0000; --primary-dark: #5C0000; --gold: #FFD700; --gold-dark: #B8860B;
+            --white: #FFFFFF; --light-bg: #FFF8F0; --card-bg: #F5E6D3;
+            --green: #2E7D32; --red: #C62828;
+            --shadow: 0 4px 20px rgba(0,0,0,0.15);
+        }
+        body {
+            font-family: 'Noto Sans Ethiopic', 'Segoe UI', sans-serif;
+            background: var(--light-bg); color: #333; min-height: 100vh;
+            overflow-x: hidden; padding-bottom: 80px;
+        }
+        .header {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: var(--white); padding: 16px 20px; display: flex;
+            justify-content: space-between; align-items: center;
+            position: sticky; top: 0; z-index: 100;
+            box-shadow: 0 2px 15px rgba(139,0,0,0.3);
+        }
+        .header-title { font-size: 22px; font-weight: 900; display: flex; align-items: center; gap: 8px; }
+        .header-title .icon { font-size: 28px; }
+        .header-balance {
+            background: rgba(255,255,255,0.2); padding: 6px 16px; border-radius: 20px;
+            font-size: 16px; font-weight: 700; display: flex; align-items: center;
+            gap: 6px; cursor: pointer;
+        }
+        .header-balance .amount { color: var(--gold); }
+        .page { display: none; padding: 16px; animation: fadeIn 0.3s ease; }
+        .page.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .bottom-nav {
+            position: fixed; bottom: 0; left: 0; right: 0;
+            background: var(--white); display: flex; justify-content: space-around;
+            padding: 8px 0 12px; box-shadow: 0 -2px 20px rgba(0,0,0,0.1);
+            z-index: 200; border-top: 2px solid var(--gold);
+        }
+        .nav-item {
+            display: flex; flex-direction: column; align-items: center;
+            font-size: 10px; color: #999; cursor: pointer;
+            padding: 4px 12px; border-radius: 12px;
+            transition: all 0.2s; background: transparent; border: none;
+        }
+        .nav-item .nav-icon { font-size: 22px; margin-bottom: 2px; }
+        .nav-item.active { color: var(--primary); font-weight: 700; }
+        .nav-item.active .nav-icon { color: var(--gold); }
+        .btn {
+            padding: 14px 24px; border: none; border-radius: 12px;
+            font-size: 16px; font-weight: 700; cursor: pointer;
+            transition: all 0.2s; width: 100%; font-family: inherit;
+        }
+        .btn:active { transform: scale(0.97); }
+        .btn-primary { background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: var(--white); }
+        .btn-gold { background: linear-gradient(135deg, var(--gold), var(--gold-dark)); color: var(--primary); }
+        .btn-outline { background: transparent; border: 2px solid var(--primary); color: var(--primary); }
+        .btn-success { background: var(--green); color: var(--white); }
+        .btn-danger { background: var(--red); color: var(--white); }
+        .btn-sm { padding: 8px 16px; font-size: 13px; width: auto; }
+        .flex-between { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+        .mt-8 { margin-top: 8px; } .mt-12 { margin-top: 12px; } .mt-16 { margin-top: 16px; }
+        .mb-8 { margin-bottom: 8px; } .mb-12 { margin-bottom: 12px; }
+        .text-center { text-align: center; } .text-sm { font-size: 13px; }
+        .text-muted { color: #888; }
+        .badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; }
+        .badge-success { background: #E8F5E9; color: var(--green); }
+        .badge-warning { background: #FFF8E1; color: var(--gold-dark); }
+        .badge-danger { background: #FFEBEE; color: var(--red); }
+        .badge-red { background: var(--red); color: white; }
+        .form-group { margin-bottom: 14px; }
+        .form-group label { display: block; font-size: 13px; font-weight: 700; color: #555; margin-bottom: 4px; }
+        .form-group input, .form-group select {
+            width: 100%; padding: 12px 16px; border: 2px solid #ddd;
+            border-radius: 12px; font-size: 16px; font-family: inherit;
+            transition: border-color 0.2s; background: #FAFAFA;
+        }
+        .form-group input:focus, .form-group select:focus { outline: none; border-color: var(--gold); }
+        .wallet-balance { background: var(--white); border-radius: 16px; padding: 20px; text-align: center; box-shadow: var(--shadow); margin-bottom: 16px; }
+        .wallet-balance .balance-amount { font-size: 32px; font-weight: 900; color: var(--primary); }
+        .wallet-balance .balance-label { font-size: 14px; color: #888; }
+        .wallet-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
+        .wallet-actions .action-btn { background: var(--white); border-radius: 12px; padding: 16px 8px; text-align: center; box-shadow: var(--shadow); cursor: pointer; border: none; font-family: inherit; transition: all 0.2s; }
+        .wallet-actions .action-btn:active { transform: scale(0.95); }
+        .wallet-actions .action-btn .icon { font-size: 28px; display: block; }
+        .wallet-actions .action-btn .label { font-size: 12px; font-weight: 700; margin-top: 4px; }
+        .sub-page { display: none; margin-top: 12px; } .sub-page.active { display: block; }
+        .method-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 15px; }
+        .method-item { background: white; border-radius: 10px; padding: 10px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1); cursor: pointer; }
+        .method-item .method-name { font-weight: bold; margin-top: 5px; font-size: 14px; }
+        .copy-btn { background: #f0f0f0; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 14px; margin-left: 5px; }
+        .copy-btn:active { background: #ddd; }
+        .payment-detail { display: flex; align-items: center; gap: 8px; margin: 5px 0; padding: 8px; background: #f9f9f9; border-radius: 8px; }
+        .payment-detail .label { font-weight: bold; font-size: 14px; }
+        .payment-detail .value { font-size: 16px; color: var(--primary-dark); }
+        .payment-detail .copy-btn { margin-left: auto; }
+        .profile-card { background: var(--white); border-radius: 16px; padding: 20px; box-shadow: var(--shadow); }
+        .profile-card .profile-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; }
+        .profile-card .profile-item:last-child { border-bottom: none; }
+        .more-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+        .more-stats .stat-box { background: var(--white); border-radius: 12px; padding: 16px; text-align: center; box-shadow: var(--shadow); }
+        .more-stats .stat-box .stat-value { font-size: 24px; font-weight: 900; color: var(--primary); }
+        .more-stats .stat-box .stat-label { font-size: 12px; color: #888; }
+        .admin-panel { background: var(--white); border-radius: 16px; padding: 16px; box-shadow: var(--shadow); margin-top: 12px; }
+        .admin-panel .admin-title { font-size: 18px; font-weight: 900; color: var(--primary); border-bottom: 2px solid var(--gold); padding-bottom: 8px; margin-bottom: 12px; }
+        .admin-scroll { max-height: 260px; overflow-y: auto; font-size: 13px; }
+        .admin-scroll .entry { padding: 4px 0; border-bottom: 1px solid #eee; }
+        .admin-search { width: 100%; padding: 6px 10px; border-radius: 8px; border: 1px solid #ddd; font-size: 13px; margin-bottom: 8px; }
+        .wd-card {
+            background: #FFF8E1;
+            border-left: 4px solid var(--gold-dark);
+            border-radius: 8px;
+            padding: 10px 12px;
+            margin: 8px 0;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        .wd-card .wd-row { display: flex; justify-content: space-between; }
+        .wd-card .wd-label { color: #666; font-weight: 700; }
+        .wd-card .wd-value { color: #222; font-weight: 700; text-align: right; }
+        .wd-card .wd-value.gold { color: var(--gold-dark); }
+        .wd-card .wd-actions { display: flex; gap: 8px; margin-top: 8px; }
+        .selection-header { display: flex; justify-content: space-between; align-items: center; background: var(--white); padding: 12px 16px; border-radius: 12px; margin-bottom: 12px; box-shadow: var(--shadow); flex-wrap: wrap; gap: 8px; }
+        .selection-header .info-item { display: flex; flex-direction: column; align-items: center; font-size: 11px; color: #888; }
+        .selection-header .info-item .value { font-size: 18px; font-weight: 900; color: var(--primary); }
+        .timer { background: var(--primary); color: var(--white); padding: 4px 14px; border-radius: 20px; font-weight: 700; font-size: 18px; min-width: 50px; text-align: center; }
+        .timer.warning { animation: pulse 0.5s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(50px, 1fr)); gap: 6px; max-height: 60vh; overflow-y: auto; padding: 10px 0; }
+        .card-item { background: #D98A22; border-radius: 10px; padding: 10px 0; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.2); cursor: pointer; transition: all 0.2s; font-weight: 700; color: white; font-size: 14px; border: none; }
+        .card-item.selected { background: #28A745; border: 2px solid #fff; }
+        .card-item.taken { background: #C62828; border: 2px solid #fff; }
+        .card-item:active { transform: scale(0.95); }
+        .card-item .card-number { font-size: 16px; font-weight: 900; }
+        .card-item .card-owner { font-size: 9px; color: #ddd; margin-top: 2px; display: block; }
+        .game-top { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; background: var(--white); padding: 10px; border-radius: 12px; margin-bottom: 12px; box-shadow: var(--shadow); }
+        .game-top .stat { text-align: center; font-size: 10px; color: #888; }
+        .game-top .stat .val { font-size: 16px; font-weight: 900; color: var(--primary); display: block; }
+        .game-top .stat .val.gold { color: var(--gold-dark); }
+        .game-layout { display: flex; gap: 12px; height: calc(100vh - 280px); min-height: 400px; }
+        .bingo-call { flex: 0 0 auto; width: 160px; background: var(--white); border-radius: 12px; padding: 8px 10px; box-shadow: var(--shadow); max-height: 180px; min-height: 80px; display: flex; flex-direction: column; }
+        .bingo-call .call-header { font-weight: 700; color: var(--primary); font-size: 12px; margin-bottom: 4px; text-align: center; border-bottom: 1px solid #eee; padding-bottom: 4px; }
+        .bingo-call .call-items-mini { display: flex; flex-wrap: wrap; gap: 4px 6px; justify-content: center; align-items: center; flex: 1; padding: 4px 0; }
+        .call-chip-mini { background: #f5f5f5; border-radius: 12px; padding: 2px 8px; font-size: 12px; font-weight: 700; color: #333; border-left: 3px solid var(--gold); white-space: nowrap; transition: all 0.1s; }
+        .call-chip-mini.called { background: #FFEBEE; color: var(--red); border-left-color: var(--red); }
+        .call-chip-mini.latest { background: var(--gold); color: var(--primary); border-left-color: var(--primary-dark); transform: scale(1.05); }
+        .call-chip-mini.empty { background: transparent; border-left-color: transparent; color: #aaa; font-weight: 400; }
+        .user-cards { flex: 2; background: var(--white); border-radius: 12px; padding: 10px; box-shadow: var(--shadow); display: flex; flex-direction: column; overflow: hidden; position: relative; min-height: 350px; }
+        .user-cards-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-shrink: 0; }
+        .user-cards-header .title { font-weight: 700; color: var(--primary); font-size: 14px; }
+        .user-cards-header .card-counter { font-size: 12px; color: #888; background: #f0f0f0; padding: 2px 12px; border-radius: 12px; }
+        .user-card-slider { flex: 1; display: flex; align-items: center; gap: 8px; min-height: 0; position: relative; }
+        .slider-arrow { background: var(--primary); color: var(--white); border: none; border-radius: 50%; width: 36px; height: 36px; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.2s; box-shadow: 0 2px 8px rgba(0,0,0,0.2); z-index: 5; }
+        .slider-arrow:active { transform: scale(0.9); }
+        .slider-arrow:disabled { opacity: 0.3; cursor: not-allowed; transform: none; }
+        .slider-arrow.left { background: var(--primary-dark); }
+        .slider-arrow.right { background: var(--primary); }
+        .slider-content { flex: 1; overflow: hidden; position: relative; min-height: 250px; display: flex; align-items: center; justify-content: center; }
+        .slider-card-wrapper { width: 100%; max-width: 320px; margin: 0 auto; transition: opacity 0.3s ease; }
+        .user-card-display { background: var(--card-bg); border-radius: 12px; padding: 12px; font-size: 10px; width: 100%; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+        .user-card-display .card-title { font-weight: 700; color: var(--primary); margin-bottom: 6px; text-align: center; font-size: 13px; }
+        .bingo-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; max-width: 300px; margin: 0 auto; }
+        .bingo-cell { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; border-radius: 4px; background: var(--white); border: 1px solid #ddd; padding: 2px; }
+        .bingo-cell.called { background: var(--green); color: var(--white); border-color: var(--green); }
+        .bingo-cell.bingo { background: var(--green) !important; color: var(--white) !important; border-color: var(--green) !important; animation: bingoFlash 0.5s infinite alternate; }
+        @keyframes bingoFlash { from { background: var(--green); } to { background: #1B5E20; } }
+        .bingo-cell.free { background: #FFD54F; border-color: #FFC107; }
+        .bingo-grid-header { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; max-width: 300px; margin: 0 auto 3px auto; font-weight: 700; font-size: 12px; color: var(--primary); text-align: center; }
+        .bingo-grid-header span { background: #f0e6d8; padding: 2px 0; border-radius: 3px; }
+        .winning-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.85); z-index: 300; display: none; align-items: center; justify-content: center; padding: 20px; animation: fadeIn 0.5s ease; }
+        .winning-overlay.show { display: flex; }
+        .winning-card { background: #1a1a2e; border-radius: 24px; padding: 24px 20px; max-width: 520px; width: 100%; color: white; box-shadow: 0 20px 60px rgba(0,0,0,0.8); border: 2px solid var(--gold); animation: winPulse 0.5s ease; max-height: 90vh; overflow-y: auto; }
+        @keyframes winPulse { 0% { transform: scale(0.5); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+        .winning-card .win-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--gold); padding-bottom: 10px; margin-bottom: 12px; }
+        .winning-card .win-header h2 { font-size: 28px; font-weight: 900; color: var(--gold); margin: 0; }
+        .winning-card .win-header .win-badge { background: var(--gold); color: #1a1a2e; padding: 4px 14px; border-radius: 20px; font-weight: 700; font-size: 14px; }
+        .winning-card .win-board { background: #0f0f1f; border-radius: 12px; padding: 12px; margin: 10px 0; border: 1px solid #444; }
+        .winning-card .win-board .bingo-grid { max-width: 100%; }
+        .winning-card .win-board .bingo-cell { background: #1a1a2e; color: #ddd; border-color: #333; font-size: 14px; font-weight: 700; aspect-ratio: 1; }
+        .winning-card .win-board .bingo-cell.called { background: #2E7D32; border-color: #2E7D32; color: white; }
+        .winning-card .win-board .bingo-cell.free { background: #FFD54F; border-color: #FFC107; color: #1a1a2e; }
+        .winning-card .win-board .bingo-cell.bingo { background: var(--gold) !important; color: #1a1a2e !important; border-color: var(--gold) !important; }
+        .winning-card .win-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 14px; color: #aaa; }
+        .winning-card .winner-list { background: #0f0f1f; border-radius: 10px; padding: 10px 12px; margin: 8px 0; border-left: 4px solid var(--gold); }
+        .winning-card .winner-list .winner-entry { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #333; font-size: 14px; }
+        .winning-card .winner-list .winner-entry:last-child { border-bottom: none; }
+        .winning-card .winner-list .winner-entry .win-card-num { color: var(--gold); font-weight: 700; }
+        .winning-card .winner-list .winner-entry .win-pattern { color: #aaa; font-size: 12px; }
+        .winning-card .winner-list .winner-entry .win-user { color: #4fc3f7; }
+        .modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 250; display: none; align-items: flex-end; justify-content: center; animation: slideUp 0.3s ease; }
+        .modal.show { display: flex; }
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        .modal-content { background: var(--white); border-radius: 24px 24px 0 0; padding: 24px; max-width: 500px; width: 100%; max-height: 85vh; overflow-y: auto; }
+        .modal-content .modal-title { font-size: 20px; font-weight: 900; color: var(--primary); margin-bottom: 16px; text-align: center; }
+        .toast { position: fixed; top: 80px; left: 50%; transform: translateX(-50%); background: linear-gradient(135deg, #2E7D32, #1B5E20); color: white; padding: 16px 28px; border-radius: 16px; font-size: 18px; font-weight: 700; z-index: 2000; box-shadow: 0 8px 30px rgba(0,0,0,0.4); border: 2px solid var(--gold); animation: slideDown 0.5s ease; max-width: 90%; text-align: center; }
+        @keyframes slideDown { from { opacity: 0; transform: translateX(-50%) translateY(-30px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+        .room-card { background: #0f0f1f; border-radius: 16px; padding: 16px; margin-bottom: 16px; border: 2px solid var(--gold); color: white; position: relative; }
+        .room-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .room-stake { font-size: 20px; font-weight: 900; color: var(--gold); }
+        .room-join-btn { background: var(--green); color: white; padding: 10px 20px; border-radius: 8px; font-weight: 700; cursor: pointer; text-align: center; border: none; font-family: inherit; }
+        .room-info { display: flex; gap: 12px; font-size: 13px; color: #aaa; justify-content: space-between; flex-wrap: wrap; }
+        .room-item { display: flex; flex-direction: column; gap: 4px; }
+        .status-blink { animation: blink 1s infinite; }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        .status-wait { color: #FFD54F; } .status-playing { color: #FF6B6B; } .status-selecting { color: #4FC3F7; }
+        .card-popup { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 500; display: none; align-items: center; justify-content: center; }
+        .card-popup.show { display: flex; }
+        .popup-content { background: #FFE4B5; border-radius: 20px; padding: 20px; max-width: 350px; width: 90%; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .popup-bingo-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin: 15px 0; }
+        .popup-bingo-cell { background: white; padding: 8px 0; border-radius: 6px; font-weight: bold; font-size: 14px; }
+        .popup-bingo-cell.free { background: #28A745; color: white; }
+        .popup-btn { padding: 10px 20px; border: none; border-radius: 10px; font-weight: bold; width: 45%; margin: 5px; cursor: pointer; }
+        .popup-btn-accept { background: #28A745; color: white; }
+        .popup-btn-cancel { background: #D98A22; color: white; }
+        .connection-status { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+        .connection-status.connected { background: #4CAF50; }
+        .connection-status.disconnected { background: #f44336; }
+        .connection-status.connecting { background: #FFC107; animation: pulse 1s infinite; }
+        .lobby-title { color: var(--primary-dark); font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 8px; margin-bottom: 15px; }
+        @media (max-width: 480px) {
+            .game-layout { flex-direction: column; height: auto; }
+            .bingo-call { width: 100%; max-height: 100px; min-height: 60px; }
+            .cards-grid { grid-template-columns: repeat(auto-fill, minmax(50px, 1fr)); }
+            .method-grid { grid-template-columns: 1fr 1fr; }
+            .more-stats { grid-template-columns: 1fr 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-title">
+            <span class="icon">🎯</span>
+            ቢንጎ ጨዋታ
+        </div>
+        <div class="header-balance" id="balanceClick">
+            💰 <span class="amount" id="headerBalance">0</span> ብር
+        </div>
+    </header>
+
+    <div id="page-game" class="page active">
+        <div id="game-lobby">
+            <div class="lobby-title">🎮 Available Games</div>
+            <div id="lobby-rooms-container"></div>
+            <button class="btn btn-outline mt-8" onclick="refreshLobby()">🔄 Refresh</button>
+        </div>
+        <div id="game-selection" style="display:none;">
+            <div class="selection-header">
+                <div class="info-item"><span>ክምችት</span><span class="value" id="selStake">0 ብር</span></div>
+                <div class="info-item"><span>የተመረጡ</span><span class="value" id="selCount">0</span></div>
+                <div class="info-item"><span>ጨዋታ ተጫውቷል</span><span class="value" id="selGameNum">0</span></div>
+                <div class="timer" id="selTimer">60</div>
+            </div>
+            <div style="background: var(--white); border-radius: 12px; padding: 12px; margin-bottom: 12px; box-shadow: var(--shadow);">
+                <div style="font-size: 13px; font-weight: 700; margin-bottom: 6px;">📋 ካርድ ምረጥ (ከ200)</div>
+                <div class="flex-between">
+                    <span class="text-muted text-sm">የእርስዎ ምርጫ</span>
+                    <span id="selStatus" style="font-size: 13px; font-weight: 700; color: var(--primary);">0 ተመርጧል</span>
+                </div>
+                <div class="flex-between mt-8">
+                    <span class="text-muted text-sm">👥 አጠቃላይ የተመረጡ</span>
+                    <span id="globalSelCount" style="font-size: 13px; font-weight: 700; color: var(--gold-dark);">0 ካርዶች</span>
+                </div>
+            </div>
+            <div class="cards-grid" id="cardsContainer"></div>
+            <button class="btn btn-outline mt-8" onclick="leaveSelection()">🔙 Back</button>
+        </div>
+        <div id="game-play" style="display:none;">
+            <div class="game-top">
+                <div class="stat"><span>ክምችት</span><span class="val" id="gameStake">0 ብር</span></div>
+                <div class="stat"><span>ካርዶች</span><span class="val" id="gameCards">0</span></div>
+                <div class="stat"><span>ድራሽ</span><span class="val gold" id="gameDerash">0 ብር</span></div>
+                <div class="stat"><span>የተጠራ</span><span class="val" id="gameCalled">0/75</span></div>
+            </div>
+            <div class="game-layout">
+                <div class="bingo-call" id="bingoCallList">
+                    <div class="call-header">📢 የቢንጎ ቁጥሮች</div>
+                    <div id="callItemsMini" class="call-items-mini"></div>
+                </div>
+                <div class="user-cards" id="userCardsDisplay">
+                    <div class="user-cards-header">
+                        <span class="title">🎴 የእርስዎ ካርዶች <span id="gamePlayerName" style="font-size:11px;color:#888;font-weight:400;"></span></span>
+                        <span class="card-counter" id="cardCounter">1 / 1</span>
+                    </div>
+                    <div class="user-card-slider" id="cardSlider">
+                        <button class="slider-arrow left" id="prevCardBtn" onclick="slideCard(-1)">◀</button>
+                        <div class="slider-content" id="sliderContent">
+                            <div class="slider-card-wrapper" id="sliderCardWrapper"></div>
+                        </div>
+                        <button class="slider-arrow right" id="nextCardBtn" onclick="slideCard(1)">▶</button>
+                    </div>
+                </div>
+            </div>
+            <button class="btn btn-outline mt-8" onclick="refreshGameState()">🔄 Refresh Game</button>
+            <button class="btn btn-outline mt-8" onclick="leaveGame()">🔙 Leave Game</button>
+        </div>
+    </div>
+
+    <div id="page-wallet" class="page">
+        <div class="wallet-balance">
+            <div class="balance-label">💰 ባላንስ</div>
+            <div class="balance-amount" id="walletBalance">0 ብር</div>
+        </div>
+        <div class="wallet-actions">
+            <button class="action-btn" onclick="showWalletSub('deposit')"><span class="icon">🏦</span><span class="label">Deposit</span></button>
+            <button class="action-btn" onclick="showWalletSub('withdraw')"><span class="icon">📤</span><span class="label">Withdraw</span></button>
+            <button class="action-btn" onclick="showWalletSub('transaction')"><span class="icon">📜</span><span class="label">Transaction</span></button>
+        </div>
+
+        <!-- ⭐ DEPOSIT: removed "Deposit via varify.et" text, "Your Phone Number" → "Transaction Message" -->
+        <div id="wallet-deposit" class="sub-page">
+            <div style="text-align:center; margin-bottom:12px;">
+                <p style="color:#333; font-size:14px;"><b>Select method, enter amount</b></p>
+            </div>
+            <div id="depositMethodSelection">
+                <div class="method-grid">
+                    <div class="method-item" onclick="setDepositMethod('cbe')"><div class="method-name">CBE Birr</div></div>
+                    <div class="method-item" onclick="setDepositMethod('ebirr')"><div class="method-name">E-BIRR</div></div>
+                    <div class="method-item" onclick="setDepositMethod('bank')"><div class="method-name">CBE Bank</div></div>
+                </div>
+            </div>
+            <div id="depositInstructions" style="display:none;">
+                <div style="background:white; border-radius:10px; padding:15px; box-shadow:0 2px 5px rgba(0,0,0,0.1);">
+                    <p style="text-align:center; font-size:18px; margin-bottom:10px;"><b id="depositName"></b></p>
+                    <div id="paymentDetails" style="display:none; background:#f0f8ff; padding:12px; border-radius:8px; margin:10px 0; border-left:4px solid var(--gold);">
+                        <div id="paymentInfo" class="payment-detail">
+                            <span class="label" id="paymentLabel">Account:</span>
+                            <span class="value" id="paymentValue"></span>
+                            <button class="copy-btn" onclick="copyPaymentDetails()">📋 Copy</button>
+                        </div>
+                        <div id="accountNameDisplay" style="font-size:13px; color:#555; margin-top:4px;"></div>
+                    </div>
+                    <div style="margin-top:10px;">
+                        <label style="font-weight:bold; font-size:14px;">Enter Amount (ብር)</label>
+                        <input type="number" id="depositAmountInput" style="width:100%; padding:12px; border:1px solid #ddd; border-radius:5px; margin-top:5px; font-size:16px;" placeholder="e.g. 100" min="1">
+                    </div>
+                    <div style="margin-top:10px;">
+                        <label style="font-weight:bold; font-size:14px;">Transaction Message</label>
+                        <input type="text" id="depositPhoneInput" style="width:100%; padding:12px; border:1px solid #ddd; border-radius:5px; margin-top:5px; font-size:16px;" placeholder="Enter the transaction message / reference" value="">
+                    </div>
+                    <button class="btn btn-gold" style="margin-top:15px;" onclick="submitDepositVerification()">📤 Send Verification</button>
+                    <div id="depositStatus" style="text-align:center; font-size:14px; margin-top:14px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ⭐ WITHDRAW: CBE Bank / CBE Birr with dynamic label -->
+        <div id="wallet-withdraw" class="sub-page">
+            <div style="background:white; border-radius:10px; padding:15px; box-shadow:0 2px 5px rgba(0,0,0,0.1);">
+                <h3 style="text-align:center;">📤 Withdraw</h3>
+                <div class="form-group"><label>መጠን (ብር)</label><input type="number" id="withdrawAmount" placeholder="መጠን ያስገቡ"></div>
+                <div class="form-group"><label>የመውጫ ዘዴ</label>
+                    <select id="withdrawMethod" onchange="onWithdrawMethodChange()">
+                        <option value="cbe_bank">CBE Bank</option>
+                        <option value="cbe_birr">CBE Birr</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label id="withdrawAddressLabel">Account Number</label>
+                    <input type="text" id="withdrawAddress" placeholder="1000xxxxxxxxx">
+                </div>
+                <button class="btn btn-primary" onclick="submitWithdraw()">✅ Send Verification</button>
+                <div id="withdrawStatus" class="mt-8 text-center text-sm text-muted"></div>
+            </div>
+        </div>
+        <div id="wallet-transaction" class="sub-page">
+            <div style="background:white; border-radius:10px; padding:15px; box-shadow:0 2px 5px rgba(0,0,0,0.1);">
+                <h3 style="text-align:center;">📜 Transaction History</h3>
+                <div id="transactionList" style="max-height:400px; overflow-y:auto;">
+                    <div class="text-muted text-sm text-center">Loading transactions...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="page-profile" class="page">
+        <div class="profile-card">
+            <div class="profile-item"><span>👤 ስም</span><span id="profileName">-</span></div>
+            <div class="profile-item"><span>💰 ባላንስ</span><span id="profileBalance">0 ብር</span></div>
+            <div class="profile-item"><span>🎁 ቦነስ ያገኘሁ</span><span id="profileBonus">0 ብር</span></div>
+            <div class="profile-item"><span>👥 የጋበዝኳቸው</span><span id="profileReferrals">0</span></div>
+        </div>
+        <div style="margin-top:16px;">
+            <button class="btn btn-outline" onclick="copyReferral()">📋 Copy Referral Link</button>
+        </div>
+    </div>
+
+    <div id="page-more" class="page">
+        <div class="more-stats">
+            <div class="stat-box">
+                <div class="stat-value" id="totalGames">0</div>
+                <div class="stat-label">🎮 አጠቃላይ ጨዋታዎች</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value" id="totalUsers">0</div>
+                <div class="stat-label">👥 አጠቃላይ ተጫዋቾች</div>
+            </div>
+        </div>
+        <div style="background:var(--white); border-radius:16px; padding:16px; box-shadow:var(--shadow); margin-bottom:12px;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-weight:700;">💰 ጠቅላላ ኮሚሽን (20%)</span>
+                <span id="totalCommission" style="font-size:24px; font-weight:900; color:var(--gold-dark);">0 ብር</span>
+            </div>
+        </div>
+        <div id="adminPanel" style="display:none;">
+            <div class="admin-panel">
+                <div class="admin-title">👑 አስተዳዳሪ ፓነል</div>
+                <div id="adminLogin">
+                    <div class="form-group"><label>ስም</label><input type="text" id="adminUsername" placeholder="የአስተዳዳሪ ስም"></div>
+                    <div class="form-group"><label>የይለፍ ቃል</label><input type="password" id="adminPassword" placeholder="የይለፍ ቃል"></div>
+                    <button class="btn btn-gold" onclick="adminLogin()">🔑 ግባ</button>
+                    <div class="login-error" id="loginError" style="color:var(--red);font-size:13px;text-align:center;margin-top:8px;"></div>
+                </div>
+                <div id="adminContent" style="display:none;">
+                    <div class="flex-between"><span>👥 ተጫዋቾች</span><button class="btn btn-sm btn-outline" onclick="adminLogout()">🚪 ውጣ</button></div>
+                    <div id="adminPlayersList" class="admin-scroll">Loading...</div>
+                    <div class="mt-8"><span>📥 ጥያቄዎች</span></div>
+                    <div id="adminRequestsList" class="admin-scroll">Loading...</div>
+                    <div class="mt-8"><span>💰 የተጠቃሚ ቁጥጥር</span></div>
+                    <input type="text" id="userSearchInput" class="admin-search" placeholder="ሰው ፈልግ...">
+                    <div id="userControlList" class="admin-scroll">Loading...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <nav class="bottom-nav">
+        <button class="nav-item active" data-tab="game" onclick="switchTab('game')">
+            <span class="nav-icon">🎮</span><span>ጨዋታ</span>
+        </button>
+        <button class="nav-item" data-tab="wallet" onclick="switchTab('wallet')">
+            <span class="nav-icon">💰</span><span>Wallet</span>
+        </button>
+        <button class="nav-item" data-tab="profile" onclick="switchTab('profile')">
+            <span class="nav-icon">👤</span><span>መገለጫ</span>
+        </button>
+        <button class="nav-item" data-tab="more" onclick="switchTab('more')">
+            <span class="nav-icon">⚙️</span><span>መገልጫ</span>
+        </button>
+    </nav>
+
+    <div class="modal" id="userInfoModal"></div>
+    <div class="winning-overlay" id="winningOverlay">
+        <div class="winning-card">
+            <div class="win-header">
+                <h2>🏆 BINGO!</h2>
+                <span class="win-badge">Winner!</span>
+            </div>
+            <div id="winningMessage" style="text-align:center;margin:6px 0;color:#4fc3f7;font-size:15px;font-weight:700;"></div>
+            <div class="winner-list" id="winnerListContainer"></div>
+            <div class="win-board" id="winBoardContainer"></div>
+            <div class="win-footer">
+                <span>🔄 ቀጣይ ጨዋታ በ <span id="winCountdown">10</span> ሰከንድ</span>
+                <span style="color: var(--gold);">💰 <span id="winAmountDisplay">0</span> ብር</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================================
+        // PRODUCTION CONFIGURATION
+        // ============================================================
+        const CONFIG = {
+            API_URL: 'https://m-bingo-backend.onrender.com',
+            WS_URL: 'wss://m-bingo-backend.onrender.com',
+            FRONTEND_URL: 'https://myf-delivery.github.io/M-Bingo/',
+            BOT_USERNAME: 'M_bingo_bot',
+            ADMIN_IDS: ['555508978'],
+        };
+        const SERVER_URL = CONFIG.WS_URL;
+
+        // ============================================================
+        // STATE
+        // ============================================================
+        let ws = null;
+        let playerId = null;
+        let myBalance = 0;
+        let playerName = 'Player';
+        let players = [];
+        let gameState = {
+            status: 'waiting', stake: 0, gameNumber: 0,
+            calledNumbers: [], calledCount: 0, totalCardsInPlay: 0,
+            selectedCards: [], selectionTimeLeft: 60, isPlaying: false
+        };
+        let sliderIndex = 0;
+        let sliderCards = [];
+        let currentGameCards = [];
+        let isGameActive = false;
+        let selectionTimer = null;
+        let selectionCountdownActive = false;
+        let winCountdownTimer = null;
+        let playerStats = { gamesPlayed: 0, wins: 0, totalWinnings: 0 };
+        let BOARDS = [];
+        let isRegistering = false;
+        let messageQueue = [];
+        let isAdmin = false;
+        let adminState = { isLoggedIn: false, adminId: null };
+        let currentTab = 'game';
+
+        let lockCardsEmpty = false;
+        let userJoinedRoom = false;
+
+        // ⭐ Cache the last admin players data so we can lookup balances for withdrawal requests
+        let lastAdminPlayersData = null;
+
+        function findCurrentPlayer() {
+            if (!playerId) return null;
+            return players.find(p =>
+                String(p.id) === String(playerId) || String(p.user_id) === String(playerId)
+            ) || null;
+        }
+
+        // ============================================================
+        // INIT
+        // ============================================================
+        document.addEventListener('DOMContentLoaded', () => { init(); });
+
+        function init() {
+            console.log('🎯 BINGO GAME v13 (deposit/withdraw/admin updates)');
+            const params = new URLSearchParams(window.location.search);
+            const userIdParam = params.get('userId');
+            if (userIdParam) {
+                playerId = userIdParam;
+                localStorage.setItem('mbingo_playerId', playerId);
+            }
+            loadCardsFromAPI().then(() => renderCards());
+            connectWebSocket();
+            if (!userIdParam) setTimeout(autoRegisterOrLogin, 500);
+            else {
+                setTimeout(() => {
+                    if (ws && ws.readyState === WebSocket.OPEN) sendToServer('auth', { userId: playerId });
+                }, 1000);
+            }
+            setInterval(updateLobbyData, 5000);
+            setInterval(fetchGlobalStats, 30000);
+            setInterval(refreshBalance, 15000);
+            checkAdminStatus();
+            switchTab('game');
+            showWalletSub('deposit');
+            setTimeout(refreshBalance, 1500);
+            // Set default withdraw label
+            onWithdrawMethodChange();
+        }
+
+        // ============================================================
+        // TAB SWITCHING
+        // ============================================================
+        function switchTab(tab) {
+            currentTab = tab;
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            document.querySelector(`.nav-item[data-tab="${tab}"]`).classList.add('active');
+            if (tab === 'game') {
+                document.getElementById('page-game').classList.add('active');
+                if (gameState.status === 'playing') {
+                    showGamePlay();
+                } else if (userJoinedRoom && gameState.status === 'selecting') {
+                    showGameSelection();
+                } else {
+                    showGameLobby();
+                }
+            } else if (tab === 'wallet') {
+                document.getElementById('page-wallet').classList.add('active');
+                updateWalletUI();
+            } else if (tab === 'profile') {
+                document.getElementById('page-profile').classList.add('active');
+                updateProfileUI();
+            } else if (tab === 'more') {
+                document.getElementById('page-more').classList.add('active');
+                updateMoreUI();
+                if (isAdmin || adminState.isLoggedIn) fetchCommissionTotal();
+            }
+            document.getElementById('headerBalance').textContent = formatMoney(myBalance);
+        }
+
+        // ============================================================
+        // GAME SUB-VIEWS
+        // ============================================================
+        function showGameLobby() {
+            document.getElementById('game-lobby').style.display = 'block';
+            document.getElementById('game-selection').style.display = 'none';
+            document.getElementById('game-play').style.display = 'none';
+            updateLobbyData();
+        }
+        function showGameSelection() {
+            document.getElementById('game-lobby').style.display = 'none';
+            document.getElementById('game-selection').style.display = 'block';
+            document.getElementById('game-play').style.display = 'none';
+            renderCards();
+            updateSelectionUI();
+        }
+        function showGamePlay() {
+            document.getElementById('game-lobby').style.display = 'none';
+            document.getElementById('game-selection').style.display = 'none';
+            document.getElementById('game-play').style.display = 'block';
+            updateGameUI();
+        }
+        function leaveSelection() {
+            clearInterval(selectionTimer);
+            selectionCountdownActive = false;
+            userJoinedRoom = false;
+            showGameLobby();
+        }
+        function leaveGame() {
+            userJoinedRoom = false;
+            showGameLobby();
+        }
+        function refreshLobby() { updateLobbyData(); }
+
+        function createRoom(stake) {
+            if (!playerId) { showToast('Please register first', false); return; }
+            selectionCountdownActive = false;
+            lockCardsEmpty = false;
+            userJoinedRoom = true;
+            clearInterval(selectionTimer);
+            sendToServer('startSelection', { stake: stake, userId: playerId });
+            gameState.stake = stake;
+            document.getElementById('selStake').textContent = stake + ' ብር';
+            showGameSelection();
+            switchTab('game');
+            startSelectionCountdown(60);
+            setTimeout(() => sendToServer('getGameState', {}), 800);
+        }
+
+        // ============================================================
+        // SELECTION COUNTDOWN
+        // ============================================================
+        function startSelectionCountdown(seconds) {
+            if (selectionCountdownActive) return;
+            selectionCountdownActive = true;
+            clearInterval(selectionTimer);
+            gameState.selectionTimeLeft = Number(seconds || 60);
+            document.getElementById('selTimer').textContent = gameState.selectionTimeLeft;
+            document.getElementById('selTimer').classList.remove('warning');
+
+            selectionTimer = setInterval(() => {
+                if (gameState.status !== 'selecting') {
+                    clearInterval(selectionTimer);
+                    selectionCountdownActive = false;
+                    return;
+                }
+                gameState.selectionTimeLeft--;
+                if (gameState.selectionTimeLeft < 0) gameState.selectionTimeLeft = 0;
+                document.getElementById('selTimer').textContent = gameState.selectionTimeLeft;
+                if (gameState.selectionTimeLeft <= 10) document.getElementById('selTimer').classList.add('warning');
+                if (gameState.selectionTimeLeft <= 0) {
+                    clearInterval(selectionTimer);
+                    selectionCountdownActive = false;
+                    document.getElementById('selTimer').textContent = '0';
+                    document.getElementById('selTimer').classList.add('warning');
+                    submitCards();
+                }
+            }, 1000);
+        }
+
+        // ============================================================
+        // WALLET UI
+        // ============================================================
+        function updateWalletUI() {
+            document.getElementById('walletBalance').textContent = formatMoney(myBalance) + ' ብር';
+            showWalletSub('deposit');
+        }
+        function showWalletSub(sub) {
+            document.querySelectorAll('.sub-page').forEach(el => el.classList.remove('active'));
+            if (sub === 'deposit') {
+                document.getElementById('wallet-deposit').classList.add('active');
+                document.getElementById('depositMethodSelection').style.display = 'block';
+                document.getElementById('depositInstructions').style.display = 'none';
+                document.getElementById('depositStatus').innerHTML = '';
+            } else if (sub === 'withdraw') {
+                document.getElementById('wallet-withdraw').classList.add('active');
+                document.getElementById('withdrawStatus').innerHTML = '';
+                onWithdrawMethodChange();
+            } else if (sub === 'transaction') {
+                document.getElementById('wallet-transaction').classList.add('active');
+                fetchTransactions();
+            }
+        }
+
+        // ⭐ Withdraw method label switch
+        function onWithdrawMethodChange() {
+            const method = document.getElementById('withdrawMethod').value;
+            const label = document.getElementById('withdrawAddressLabel');
+            const input = document.getElementById('withdrawAddress');
+            if (method === 'cbe_bank') {
+                label.textContent = 'Account Number';
+                input.placeholder = '1000xxxxxxxxx';
+            } else {
+                label.textContent = 'Phone Number';
+                input.placeholder = '09xxxxxxxx';
+            }
+            input.value = '';
+        }
+
+        // ============================================================
+        // PROFILE
+        // ============================================================
+        function updateProfileUI() {
+            document.getElementById('profileName').textContent = playerName;
+            document.getElementById('profileBalance').textContent = formatMoney(myBalance) + ' ብር';
+            fetchProfileDetails();
+        }
+        async function fetchProfileDetails() {
+            try {
+                const res = await fetch(`${CONFIG.API_URL}/api/users/${playerId}`, { mode: 'cors' });
+                const data = await res.json();
+                if (data.success) {
+                    document.getElementById('profileBonus').textContent = formatMoney(data.user.bonus || 0) + ' ብር';
+                    document.getElementById('profileReferrals').textContent = data.user.referralCount || 0;
+                }
+            } catch (e) {}
+        }
+
+        // ============================================================
+        // REFRESH BALANCE
+        // ============================================================
+        async function refreshBalance() {
+            if (!playerId) return;
+            try {
+                const res = await fetch(`${CONFIG.API_URL}/api/wallet/${playerId}?_=${Date.now()}`, { mode: 'cors', cache: 'no-store' });
+                const data = await res.json();
+                if (data && data.balance !== undefined) {
+                    myBalance = Number(data.balance);
+                    document.getElementById('headerBalance').textContent = formatMoney(myBalance);
+                    if (document.getElementById('walletBalance')) {
+                        document.getElementById('walletBalance').textContent = formatMoney(myBalance) + ' ብር';
+                    }
+                    if (document.getElementById('profileBalance')) {
+                        document.getElementById('profileBalance').textContent = formatMoney(myBalance) + ' ብር';
+                    }
+                }
+            } catch (e) {}
+        }
+
+        // ============================================================
+        // MORE
+        // ============================================================
+        function updateMoreUI() { fetchGlobalStats(); checkAdminStatus(); }
+        async function fetchGlobalStats() {
+            try {
+                const res = await fetch(`${CONFIG.API_URL}/api/admin/stats`, { mode: 'cors' });
+                const stats = await res.json();
+                document.getElementById('totalGames').textContent = stats.totalRooms || 0;
+                document.getElementById('totalUsers').textContent = stats.totalPlayers || 0;
+            } catch (e) {}
+        }
+        async function fetchCommissionTotal() {
+            try {
+                const res = await fetch(`${CONFIG.API_URL}/api/admin/commission?_=${Date.now()}`, { mode: 'cors', cache: 'no-store' });
+                const data = await res.json();
+                document.getElementById('totalCommission').textContent = formatMoney(data.totalCommission || 0) + ' ብር';
+            } catch (e) {}
+        }
+
+        // ============================================================
+        // ADMIN
+        // ============================================================
+        function checkAdminStatus() {
+            isAdmin = (CONFIG.ADMIN_IDS || []).includes(String(playerId));
+            const panel = document.getElementById('adminPanel');
+            if (isAdmin) {
+                panel.style.display = 'block';
+                if (adminState.isLoggedIn) {
+                    document.getElementById('adminLogin').style.display = 'none';
+                    document.getElementById('adminContent').style.display = 'block';
+                    fetchAdminData();
+                } else {
+                    document.getElementById('adminLogin').style.display = 'block';
+                    document.getElementById('adminContent').style.display = 'none';
+                }
+            } else panel.style.display = 'none';
+        }
+
+        async function adminLogin() {
+            const username = document.getElementById('adminUsername').value.trim();
+            const password = document.getElementById('adminPassword').value.trim();
+            if (!username || !password) {
+                document.getElementById('loginError').textContent = '❌ Please enter username and password';
+                return;
+            }
+            try {
+                const response = await fetch(`${CONFIG.API_URL}/api/admin/login`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, mode: 'cors',
+                    body: JSON.stringify({ username, password })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    adminState.isLoggedIn = true;
+                    adminState.adminId = result.adminId || username;
+                    document.getElementById('adminLogin').style.display = 'none';
+                    document.getElementById('adminContent').style.display = 'block';
+                    document.getElementById('loginError').textContent = '';
+                    showToast('✅ Admin logged in successfully!');
+                    await fetchAdminData();
+                    await fetchCommissionTotal();
+                } else {
+                    document.getElementById('loginError').textContent = '❌ ' + (result.message || 'Invalid credentials');
+                }
+            } catch (error) {
+                document.getElementById('loginError').textContent = '❌ Connection error.';
+            }
+        }
+
+        function adminLogout() {
+            adminState.isLoggedIn = false;
+            adminState.adminId = null;
+            document.getElementById('adminLogin').style.display = 'block';
+            document.getElementById('adminContent').style.display = 'none';
+            document.getElementById('adminUsername').value = '';
+            document.getElementById('adminPassword').value = '';
+            document.getElementById('loginError').textContent = '';
+            showToast('👋 Logged out');
+        }
+
+        async function fetchAdminData() {
+            if (!adminState.isLoggedIn) return;
+            try {
+                const ts = Date.now();
+                const [playersRes, depositsRes, withdrawalsRes] = await Promise.all([
+                    fetch(`${CONFIG.API_URL}/api/admin/data?adminId=${adminState.adminId}&_=${ts}`, { mode: 'cors', cache: 'no-store' }),
+                    fetch(`${CONFIG.API_URL}/api/admin/deposits?adminId=${adminState.adminId}&_=${ts}`, { mode: 'cors', cache: 'no-store' }),
+                    fetch(`${CONFIG.API_URL}/api/admin/withdrawals?adminId=${adminState.adminId}&_=${ts}`, { mode: 'cors', cache: 'no-store' })
+                ]);
+                const playersData = await playersRes.json();
+                const depositsData = await depositsRes.json();
+                const withdrawalsData = await withdrawalsRes.json();
+                lastAdminPlayersData = playersData;   // ⭐ cache for balance lookup
+                renderAdminPlayers(playersData);
+                renderAdminRequests(depositsData, withdrawalsData, playersData);
+                renderAdminUserControl(playersData);
+            } catch (e) { console.error('Admin fetch error:', e); }
+        }
+
+        function renderAdminPlayers(data) {
+            const container = document.getElementById('adminPlayersList');
+            if (!data || !data.players || data.players.length === 0) {
+                container.innerHTML = '<div class="text-muted text-sm">ምንም ተጫዋቾች የሉም</div>';
+                return;
+            }
+            let html = '';
+            data.players.slice(0, 20).forEach(p => {
+                html += `<div class="entry">👤 ${p.name || 'Player'} (${formatMoney(p.balance)} ብር) ${p.is_banned ? '🚫' : '✅'}</div>`;
+            });
+            container.innerHTML = html;
+        }
+
+        // ⭐ Withdrawal entries now show full details + user's total balance
+        function renderAdminRequests(deposits, withdrawals, playersData) {
+            const container = document.getElementById('adminRequestsList');
+            let html = '';
+
+            if (deposits && deposits.length) {
+                html += '<div style="font-weight:700;color:var(--green);">📥 Deposits</div>';
+                deposits.slice(0, 5).forEach(d => {
+                    html += `<div class="entry" data-id="${d.id}">👤 ${d.userName}: ${formatMoney(d.amount)} ብር <button class="btn btn-sm btn-success" onclick="approveDeposit('${d.id}')">✅</button> <button class="btn btn-sm btn-danger" onclick="rejectDeposit('${d.id}')">❌</button></div>`;
+                });
+            }
+
+            if (withdrawals && withdrawals.length) {
+                html += '<div style="font-weight:700;color:var(--red);margin-top:10px;">📤 Withdraw Requests</div>';
+
+                withdrawals.slice(0, 5).forEach(w => {
+                    // ⭐ Look up the user's balance from the cached players list
+                    let userBalance = '0';
+                    if (playersData && playersData.players) {
+                        const player = playersData.players.find(p =>
+                            String(p.telegram_id) === String(w.userId)
+                        );
+                        if (player) userBalance = formatMoney(player.balance);
+                    }
+
+                    // Format the method for display
+                    const methodLabel =
+                        w.method === 'cbe_bank' ? 'CBE Bank' :
+                        w.method === 'cbe_birr' ? 'CBE Birr' :
+                        (w.method || 'Unknown');
+
+                    html += `
+                        <div class="wd-card" data-id="${w.id}">
+                            <div class="wd-row">
+                                <span class="wd-label">👤 User Name:</span>
+                                <span class="wd-value">${w.userName || 'Unknown'}</span>
+                            </div>
+                            <div class="wd-row">
+                                <span class="wd-label">💰 Amount:</span>
+                                <span class="wd-value gold">${formatMoney(w.amount)} ብር</span>
+                            </div>
+                            <div class="wd-row">
+                                <span class="wd-label">🏦 Method:</span>
+                                <span class="wd-value">${methodLabel}</span>
+                            </div>
+                            <div class="wd-row">
+                                <span class="wd-label">📱 Address:</span>
+                                <span class="wd-value">${w.destination || 'N/A'}</span>
+                            </div>
+                            <div class="wd-row">
+                                <span class="wd-label">💳 Total Balance:</span>
+                                <span class="wd-value gold">${userBalance} ብር</span>
+                            </div>
+                            <div class="wd-actions">
+                                <button class="btn btn-sm btn-success" style="flex:1;" onclick="approveWithdrawal('${w.id}')">✅ Approve</button>
+                                <button class="btn btn-sm btn-danger" style="flex:1;" onclick="rejectWithdrawal('${w.id}')">❌ Reject</button>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+
+            if (!html) html = '<div class="text-muted text-sm">ምንም ጥያቄ የለም</div>';
+            container.innerHTML = html;
+        }
+
+        function removeEntryById(id) {
+            const container = document.getElementById('adminRequestsList');
+            if (!container) return;
+            const entries = container.querySelectorAll('[data-id]');
+            entries.forEach(e => {
+                if (e.getAttribute('data-id') === String(id)) e.remove();
+            });
+        }
+
+        function renderAdminUserControl(data) {
+            const container = document.getElementById('userControlList');
+            if (!data || !data.players || data.players.length === 0) {
+                container.innerHTML = '<div class="text-muted text-sm">ምንም ተጫዋቾች የሉም</div>';
+                return;
+            }
+            let html = '';
+            data.players.slice(0, 30).forEach(p => {
+                const status = p.is_banned ? '🚫 ታግዷል' : '✅ ንቁ';
+                const controlBtn = p.is_banned
+                    ? `<button class="btn btn-sm btn-success" onclick="adminBan('${p.id}', false)">✅ ገደብ አንሳ</button>`
+                    : `<button class="btn btn-sm btn-danger" onclick="adminBan('${p.id}', true)">🚫 አግድ</button>`;
+                html += `<div class="entry" data-name="${(p.name || '').toLowerCase()}">${p.name || 'Player'} (${p.telegram_id}) - ${status} ${controlBtn}</div>`;
+            });
+            container.innerHTML = html;
+            document.getElementById('userSearchInput').oninput = function() {
+                const query = this.value.toLowerCase();
+                const items = container.querySelectorAll('.entry');
+                items.forEach(item => {
+                    const text = item.getAttribute('data-name') || '';
+                    item.style.display = text.includes(query) ? 'block' : 'none';
+                });
+            };
+        }
+
+        async function approveDeposit(id) {
+            try {
+                removeEntryById(id);
+                const res = await fetch(`${CONFIG.API_URL}/api/admin/deposits/approve`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, mode: 'cors',
+                    body: JSON.stringify({ adminId: adminState.adminId, depositId: id })
+                });
+                const data = await res.json();
+                if (res.ok && data.success !== false) {
+                    showToast('✅ Deposit Approved');
+                    await fetchAdminData();
+                    setTimeout(refreshBalance, 1500);
+                } else {
+                    showToast('❌ ' + (data.error || 'Approval failed'), false);
+                    await fetchAdminData();
+                }
+            } catch (e) { showToast('❌ Error', false); await fetchAdminData(); }
+        }
+
+        async function rejectDeposit(id) {
+            try {
+                removeEntryById(id);
+                const res = await fetch(`${CONFIG.API_URL}/api/admin/deposits/reject`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, mode: 'cors',
+                    body: JSON.stringify({ adminId: adminState.adminId, depositId: id, reason: 'Rejected by admin' })
+                });
+                const data = await res.json();
+                if (res.ok && data.success !== false) {
+                    showToast('✅ Deposit Rejected');
+                    await fetchAdminData();
+                    setTimeout(refreshBalance, 1500);
+                } else {
+                    showToast('❌ ' + (data.error || 'Reject failed'), false);
+                    await fetchAdminData();
+                }
+            } catch (e) { showToast('❌ Error', false); await fetchAdminData(); }
+        }
+
+        async function approveWithdrawal(id) {
+            try {
+                removeEntryById(id);
+                const res = await fetch(`${CONFIG.API_URL}/api/admin/withdrawals/approve`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, mode: 'cors',
+                    body: JSON.stringify({ adminId: adminState.adminId, withdrawalId: id })
+                });
+                const data = await res.json();
+                if (res.ok && data.success !== false) {
+                    showToast('✅ Withdrawal Approved');
+                    await fetchAdminData();
+                    setTimeout(refreshBalance, 1500);
+                } else {
+                    showToast('❌ ' + (data.error || 'Approval failed'), false);
+                    await fetchAdminData();
+                }
+            } catch (e) { showToast('❌ Error', false); await fetchAdminData(); }
+        }
+
+        async function rejectWithdrawal(id) {
+            try {
+                removeEntryById(id);
+                const res = await fetch(`${CONFIG.API_URL}/api/admin/withdrawals/reject`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, mode: 'cors',
+                    body: JSON.stringify({ adminId: adminState.adminId, withdrawalId: id, reason: 'Rejected by admin' })
+                });
+                const data = await res.json();
+                if (res.ok && data.success !== false) {
+                    showToast('✅ Withdrawal Rejected');
+                    await fetchAdminData();
+                    setTimeout(refreshBalance, 1500);
+                } else {
+                    showToast('❌ ' + (data.error || 'Reject failed'), false);
+                    await fetchAdminData();
+                }
+            } catch (e) { showToast('❌ Error', false); await fetchAdminData(); }
+        }
+
+        async function adminBan(playerIdArg, isBan) {
+            try {
+                const action = isBan ? 'ban' : 'unban';
+                const res = await fetch(`${CONFIG.API_URL}/api/admin/action`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, mode: 'cors',
+                    body: JSON.stringify({ adminId: adminState.adminId, action, playerId: playerIdArg })
+                });
+                if (res.ok) { showToast(`✅ ${isBan ? 'Banned' : 'Unbanned'}`); fetchAdminData(); }
+            } catch (e) { showToast('❌ Error', false); }
+        }
+
+        // ============================================================
+        // DEPOSIT / WITHDRAW
+        // ============================================================
+        function setDepositMethod(method) {
+            const nameEl = document.getElementById('depositName');
+            document.getElementById('depositMethodSelection').style.display = 'none';
+            document.getElementById('depositInstructions').style.display = 'block';
+            window._depositMethod = method;
+            const detailsDiv = document.getElementById('paymentDetails');
+            const labelEl = document.getElementById('paymentLabel');
+            const valueEl = document.getElementById('paymentValue');
+            const nameDisplay = document.getElementById('accountNameDisplay');
+            if (method === 'bank') {
+                nameEl.textContent = 'CBE Bank';
+                labelEl.textContent = 'Account Number:';
+                valueEl.textContent = '1000070045207';
+                nameDisplay.textContent = 'Account Name: Frezer abiy';
+                detailsDiv.style.display = 'block';
+            } else if (method === 'cbe' || method === 'ebirr') {
+                nameEl.textContent = (method === 'cbe') ? 'CBE Birr' : 'E-BIRR';
+                labelEl.textContent = 'Phone Number:';
+                valueEl.textContent = '0913843534';
+                nameDisplay.textContent = 'Send to this phone number';
+                detailsDiv.style.display = 'block';
+            } else { detailsDiv.style.display = 'none'; }
+            window._paymentValue = valueEl.textContent;
+        }
+
+        function copyPaymentDetails() {
+            const val = window._paymentValue || '';
+            if (navigator.clipboard) navigator.clipboard.writeText(val).then(() => showToast('✅ Copied!'));
+            else {
+                const input = document.createElement('input');
+                input.value = val;
+                document.body.appendChild(input);
+                input.select();
+                document.execCommand('copy');
+                document.body.removeChild(input);
+                showToast('✅ Copied!');
+            }
+        }
+
+        // ⭐ Deposit: send the "Transaction Message" as phone param to backend
+        async function submitDepositVerification() {
+            const amount = parseInt(document.getElementById('depositAmountInput').value.trim());
+            const message = document.getElementById('depositPhoneInput').value.trim();
+            if (!amount || amount < 50 || amount > 5000) { showToast('❌ Amount must be 50-5000', false); return; }
+            if (!message) { showToast('❌ Please enter the transaction message', false); return; }
+            const statusEl = document.getElementById('depositStatus');
+            statusEl.innerHTML = '<b>⏳ Sending verification request...</b>';
+            const method = window._depositMethod || 'cbe';
+            try {
+                sendToServer('depositRequest', { userId: playerId, amount, method, phone: message });
+                const res = await fetch(`${CONFIG.API_URL}/api/deposit/request`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, mode: 'cors',
+                    body: JSON.stringify({ userId: playerId, amount, method, phone: message })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    statusEl.innerHTML = '✅ <b>Verification sent!</b> Your request is pending admin approval.';
+                    showToast('✅ Deposit request sent for admin approval!');
+                } else {
+                    statusEl.innerHTML = '❌ ' + (data.message || 'Failed to send request');
+                }
+            } catch (e) { statusEl.innerHTML = '❌ Error sending request. Try again.'; }
+        }
+
+        // ⭐ Withdraw: validation depends on the method
+        async function submitWithdraw() {
+            const amount = parseInt(document.getElementById('withdrawAmount').value);
+            const method = document.getElementById('withdrawMethod').value;
+            const address = document.getElementById('withdrawAddress').value.trim();
+            if (!amount || amount <= 0) { showToast('Enter valid amount', false); return; }
+            if (amount > myBalance) { showToast('Insufficient balance', false); return; }
+            if (!address) { showToast('Please enter the ' + (method === 'cbe_bank' ? 'account number' : 'phone number'), false); return; }
+            if (method === 'cbe_bank' && address.length < 8) { showToast('Enter valid account number', false); return; }
+            if (method === 'cbe_birr' && address.length < 10) { showToast('Enter valid phone number', false); return; }
+
+            const statusEl = document.getElementById('withdrawStatus');
+            statusEl.innerHTML = '⏳ Sending request...';
+            try {
+                sendToServer('withdrawRequest', { userId: playerId, amount, method, account: address });
+                const res = await fetch(`${CONFIG.API_URL}/api/withdraw/request`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, mode: 'cors',
+                    body: JSON.stringify({ userId: playerId, amount, method, account: address })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    statusEl.innerHTML = `✅ Request sent! ${formatMoney(amount)} will be processed.`;
+                    showToast('✅ Withdrawal request sent for admin approval!');
+                    setTimeout(refreshBalance, 1500);
+                } else {
+                    statusEl.innerHTML = `❌ ${data.message || 'Failed'}`;
+                }
+            } catch (e) { statusEl.innerHTML = '❌ Error. Try again.'; }
+        }
+
+        async function fetchTransactions() {
+            const container = document.getElementById('transactionList');
+            try {
+                const res = await fetch(`${CONFIG.API_URL}/api/transactions/${playerId}`, { mode: 'cors' });
+                const data = await res.json();
+                if (data.success && data.transactions.length) {
+                    let html = '';
+                    data.transactions.slice(0, 20).forEach(t => {
+                        const type = t.type === 'deposit' ? '💰 Deposit' : t.type === 'withdraw' ? '📤 Withdraw' : '🔄 Transfer';
+                        const sign = t.type === 'deposit' ? '+' : '-';
+                        html += `<div class="entry">${type}: ${sign}${formatMoney(t.amount)} (${t.status || 'PENDING'})</div>`;
+                    });
+                    container.innerHTML = html;
+                } else {
+                    container.innerHTML = '<div class="text-muted text-sm">No transactions found.</div>';
+                }
+            } catch (e) {
+                container.innerHTML = '<div class="text-muted text-sm">Could not load transactions.</div>';
+            }
+        }
+
+        function copyReferral() {
+            const link = `https://t.me/${CONFIG.BOT_USERNAME}?start=ref_${playerId}`;
+            if (navigator.clipboard) navigator.clipboard.writeText(link).then(() => showToast('✅ Copied!'));
+            else {
+                const input = document.createElement('input');
+                input.value = link;
+                document.body.appendChild(input);
+                input.select();
+                document.execCommand('copy');
+                document.body.removeChild(input);
+                showToast('✅ Copied!');
+            }
+        }
+
+        // ============================================================
+        // WEBSOCKET
+        // ============================================================
+        function connectWebSocket() {
+            if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+            const urls = [SERVER_URL];
+            let currentUrlIndex = 0;
+            function tryConnect() {
+                if (currentUrlIndex >= urls.length) { setTimeout(connectWebSocket, 5000); return; }
+                const url = urls[currentUrlIndex];
+                try {
+                    ws = new WebSocket(url);
+                    ws.onopen = () => { while (messageQueue.length) ws.send(JSON.stringify(messageQueue.shift())); };
+                    ws.onmessage = (event) => {
+                        try { handleServerMessage(JSON.parse(event.data)); } catch (e) { console.error('Parse error:', e); }
+                    };
+                    ws.onclose = () => {
+                        setTimeout(() => {
+                            if (!ws || ws.readyState === WebSocket.CLOSED) { currentUrlIndex++; tryConnect(); }
+                        }, 3000);
+                    };
+                    ws.onerror = (error) => { ws.close(); };
+                } catch (e) { currentUrlIndex++; tryConnect(); }
+            }
+            tryConnect();
+        }
+
+        function sendToServer(type, data) {
+            const message = { type, data };
+            if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));
+            else { messageQueue.push(message); if (!ws || ws.readyState === WebSocket.CLOSED) connectWebSocket(); }
+        }
+
+        function handleServerMessage(message) {
+            console.log('📩 Received:', message.type);
+            switch (message.type) {
+                case 'connected':
+                    if (playerId) sendToServer('auth', { userId: playerId });
+                    break;
+                case 'authSuccess':
+                    playerId = message.data.userId;
+                    if (message.data.balance !== undefined) myBalance = Number(message.data.balance);
+                    updatePlayerUI();
+                    isRegistering = false;
+                    break;
+                case 'init':
+                    playerId = message.data.playerId;
+                    if (message.data.balance !== undefined) myBalance = Number(message.data.balance);
+                    players = message.data.players || [];
+                    gameState = { ...gameState, ...message.data.gameState };
+                    if (gameState.status === 'playing') {
+                        selectionCountdownActive = false;
+                        lockCardsEmpty = false;
+                        clearInterval(selectionTimer);
+                        showGamePlay();
+                        setTimeout(() => sendToServer('getGameState', {}), 300);
+                    } else if (userJoinedRoom && gameState.status === 'selecting') {
+                        showGameSelection();
+                        startSelectionCountdown(gameState.selectionTimeLeft || 60);
+                    } else {
+                        gameState.status = 'waiting';
+                        showGameLobby();
+                    }
+                    updatePlayerUI();
+                    break;
+                case 'playersUpdate':
+                    players = message.data;
+                    updatePlayerUI();
+                    break;
+                case 'gameStateUpdate':
+                    gameState.status = message.data.status;
+                    gameState.selectedCards = message.data.selectedCards || [];
+                    gameState.stake = message.data.stake || 0;
+                    gameState.gameNumber = message.data.gameNumber || 0;
+                    players = message.data.players || players;
+                    if (message.data.calledNumbers) gameState.calledNumbers = message.data.calledNumbers;
+                    if (message.data.calledCount !== undefined) gameState.calledCount = message.data.calledCount;
+                    if (message.data.cards && message.data.cards.length) currentGameCards = message.data.cards;
+                    updatePlayerUI();
+                    if (gameState.status === 'selecting') {
+                        if (Array.isArray(message.data.selectedCards) && message.data.selectedCards.length === 0) {
+                            if (players) players.forEach(p => { if (p.cards) p.cards = []; });
+                        }
+                        if (!selectionCountdownActive && gameState.selectionTimeLeft > 0 && userJoinedRoom) {
+                            startSelectionCountdown(gameState.selectionTimeLeft);
+                        }
+                        if (userJoinedRoom) showGameSelection();
+                        renderCards();
+                    } else if (gameState.status === 'playing') {
+                        clearInterval(selectionTimer);
+                        selectionCountdownActive = false;
+                        lockCardsEmpty = false;
+                        showGamePlay();
+                        updateGameUI();
+                    } else {
+                        showGameLobby();
+                    }
+                    break;
+                case 'selectionTimer':
+                    if (!selectionCountdownActive && message.data.timeLeft !== undefined && userJoinedRoom) {
+                        startSelectionCountdown(message.data.timeLeft);
+                    }
+                    break;
+                case 'gameStart':
+                    gameState.isPlaying = true;
+                    gameState.status = 'playing';
+                    gameState.gameNumber = message.data.gameNumber;
+                    gameState.stake = message.data.stake;
+                    gameState.totalCardsInPlay = message.data.totalCards;
+                    currentGameCards = message.data.cards || [];
+                    if (message.data.calledNumbers) gameState.calledNumbers = message.data.calledNumbers;
+                    if (message.data.calledCount !== undefined) gameState.calledCount = message.data.calledCount;
+                    clearInterval(selectionTimer);
+                    selectionCountdownActive = false;
+                    lockCardsEmpty = false;
+                    showGamePlay();
+                    isGameActive = true;
+                    sliderIndex = 0;
+                    sliderCards = currentGameCards.filter(c => String(c.playerId) === String(playerId));
+                    updateGameUI();
+                    playerStats.gamesPlayed++;
+                    updateStatsUI();
+                    setTimeout(() => sendToServer('getGameState', {}), 500);
+                    break;
+                case 'numberCalled':
+                    gameState.calledNumbers = message.data.calledNumbers || gameState.calledNumbers || [];
+                    gameState.calledCount = message.data.calledCount || gameState.calledCount || 0;
+                    if (message.data.cards && message.data.cards.length) currentGameCards = message.data.cards;
+                    else if (currentGameCards.length) {
+                        const num = message.data.number;
+                        currentGameCards.forEach(card => {
+                            if (!card.marked) card.marked = Array(5).fill().map(() => Array(5).fill(false));
+                            for (let r = 0; r < 5; r++)
+                                for (let c = 0; c < 5; c++)
+                                    if (card.board[r][c] === num) card.marked[r][c] = true;
+                        });
+                    }
+                    updateGameUI();
+                    break;
+                case 'gameEnd':
+                    gameState.isPlaying = false;
+                    gameState.status = 'ended';
+                    isGameActive = false;
+                    clearInterval(selectionTimer);
+                    selectionCountdownActive = false;
+                    lockCardsEmpty = false;
+                    userJoinedRoom = false;
+                    const winners = message.data.winners || [];
+                    const prizePerWinner = message.data.prizePerWinner || 0;
+                    if (winners.length) {
+                        if (winners.some(w => String(w.playerId) === String(playerId) || String(w.user_id) === String(playerId))) {
+                            playerStats.wins++;
+                            playerStats.totalWinnings += prizePerWinner;
+                            updateStatsUI();
+                        }
+                        showWinningOverlay(winners, prizePerWinner);
+                    } else {
+                        showToast('😅 ምንም አሸናፊ የለም!', false);
+                        setTimeout(() => { showGameLobby(); switchTab('game'); }, 3000);
+                    }
+                    setTimeout(refreshBalance, 1500);
+                    break;
+                case 'cardSelectionResult':
+                    if (message.data.success) sendToServer('getGameState', {});
+                    else showToast(`❌ ${message.data.message}`, false);
+                    break;
+                case 'gameError':
+                    showToast(`⚠️ ${message.data.message}`, false);
+                    break;
+                case 'lobbyData':
+                    renderLobby(message.data);
+                    break;
+                case 'depositStatus':
+                    handleDepositStatus(message.data);
+                    break;
+                default:
+                    console.log('Unhandled message type:', message.type);
+            }
+        }
+
+        // ============================================================
+        // LOBBY
+        // ============================================================
+        function updateLobbyData() { sendToServer('getLobbyData', {}); }
+
+        function renderLobby(data) {
+            const container = document.getElementById('lobby-rooms-container');
+            container.innerHTML = '';
+            const rooms = [{ stake: 10 }, { stake: 20 }, { stake: 50 }];
+            rooms.forEach(room => {
+                const serverData = data.find(r => r.stake === room.stake) || {};
+                const noCards = serverData.selectedCardsCount || 0;
+                const winAmount = Math.round(noCards * room.stake * 0.8);
+                const status = serverData.status || 'waiting';
+                const timeLeft = serverData.selectionTimeLeft || 0;
+                let statusDisplay = '';
+                let statusClass = '';
+                if (noCards === 0 && status !== 'playing') {
+                    statusDisplay = '⏳ Wait';
+                    statusClass = 'status-wait status-blink';
+                } else if (status === 'playing') {
+                    statusDisplay = '🔴 Playing';
+                    statusClass = 'status-playing status-blink';
+                } else if (status === 'selecting' && timeLeft > 0) {
+                    statusDisplay = `⏳ ${timeLeft}s`;
+                    statusClass = 'status-selecting';
+                } else {
+                    statusDisplay = '⏳ Wait';
+                    statusClass = 'status-wait status-blink';
+                }
+                const roomCard = document.createElement('div');
+                roomCard.className = 'room-card';
+                roomCard.innerHTML = `
+                    <div class="room-top">
+                        <div class="room-stake">${room.stake} ETB</div>
+                        <button class="room-join-btn" onclick="createRoom(${room.stake})">JOIN</button>
+                    </div>
+                    <div class="room-info">
+                        <div class="room-item"><span>👥 ${noCards} ካርዶች ተመርጠዋል</span></div>
+                        <div class="room-item"><span>💰 ${winAmount} ETB</span></div>
+                        <div class="room-item"><span class="${statusClass}">${statusDisplay}</span></div>
+                    </div>
+                `;
+                container.appendChild(roomCard);
+            });
+        }
+
+        // ============================================================
+        // SELECTION UI
+        // ============================================================
+        function updateSelectionTimer() {
+            if (gameState.status !== 'selecting') {
+                clearInterval(selectionTimer);
+                selectionCountdownActive = false;
+                document.getElementById('selTimer').textContent = '60';
+                document.getElementById('selTimer').classList.remove('warning');
+                return;
+            }
+            if (!selectionCountdownActive && gameState.selectionTimeLeft > 0) {
+                startSelectionCountdown(gameState.selectionTimeLeft);
+            }
+        }
+
+        function updateSelectionUI() {
+            const totalSelected = gameState.selectedCards ? gameState.selectedCards.length : 0;
+            document.getElementById('selCount').textContent = totalSelected;
+            document.getElementById('globalSelCount').textContent = totalSelected + ' ካርዶች';
+            const currentPlayer = findCurrentPlayer();
+            document.getElementById('selStatus').textContent = (currentPlayer?.cards?.length || 0) + ' ተመርጧል';
+            document.getElementById('selStake').textContent = (gameState.stake || 0) + ' ብር';
+        }
+
+        // ============================================================
+        // CARDS
+        // ============================================================
+        function renderCards() {
+            const container = document.getElementById('cardsContainer');
+            if (!container) return;
+            container.innerHTML = '';
+            if (!BOARDS || !BOARDS.length) {
+                container.innerHTML = '<div style="text-align:center;padding:20px;color:#999;">⏳ Loading cards...</div>';
+                return;
+            }
+            const currentPlayer = findCurrentPlayer();
+            const takenCards = lockCardsEmpty ? [] : (gameState.selectedCards || []);
+            const myCards = lockCardsEmpty ? [] : ((currentPlayer && Array.isArray(currentPlayer.cards)) ? currentPlayer.cards.map(Number) : []);
+
+            BOARDS.forEach((board, index) => {
+                const cardNum = index + 1;
+                const isSelected = myCards.includes(cardNum);
+                const isTaken = takenCards.includes(cardNum) && !isSelected;
+                const div = document.createElement('div');
+                div.className = 'card-item';
+                if (isSelected) div.classList.add('selected');
+                else if (isTaken) div.classList.add('taken');
+                div.dataset.card = cardNum;
+                let statusText = '';
+                if (isTaken) statusText = '🔴 ተይዟል';
+                else if (isSelected) statusText = '✅ ተመርጧል';
+                else statusText = '⬜ ክፍት';
+                div.innerHTML = `<div class="card-number">#${cardNum}</div><span class="card-owner">${statusText}</span>`;
+                if (isSelected) { div.onclick = () => deselectCard(cardNum); div.style.cursor = 'pointer'; }
+                else if (isTaken) {
+                    div.onclick = () => showToast('ካርድ #' + cardNum + ' በሌላ ተጫዋች ተመርጧል!', false);
+                    div.style.cursor = 'not-allowed';
+                } else {
+                    div.onclick = () => showCardPopup(cardNum, board);
+                    div.style.cursor = 'pointer';
+                }
+                container.appendChild(div);
+            });
+            updateSelectionUI();
+        }
+
+        function deselectCard(cardNum) {
+            if (lockCardsEmpty) return;
+            const currentPlayer = findCurrentPlayer();
+            if (!currentPlayer || !Array.isArray(currentPlayer.cards)) return;
+            const idx = currentPlayer.cards.indexOf(cardNum);
+            if (idx === -1) return;
+            currentPlayer.cards.splice(idx, 1);
+            document.getElementById('selStatus').textContent = `${currentPlayer.cards.length} ተመርጧል`;
+            sendToServer('deselectCard', { cardNumber: cardNum });
+            renderCards();
+            showToast('ካርድ #' + cardNum + ' ተነስቷል');
+        }
+
+        function showCardPopup(cardNum, board) {
+            if (lockCardsEmpty) {
+                showToast('⏳ እባክዎ ይጠብቁ, በመቀየር ላይ...', false);
+                return;
+            }
+            const stake = gameState.stake || 0;
+            if (myBalance < stake) {
+                showToast('❌ በቂ ባላንስ የለዎትም! (You have insufficient balance!)', false);
+                return;
+            }
+            const popup = document.createElement('div');
+            popup.className = 'card-popup show';
+            popup.id = 'cardPopup';
+            let gridHtml = '';
+            board.forEach(row => {
+                row.forEach(num => {
+                    const isStar = num === '★';
+                    gridHtml += `<div class="popup-bingo-cell ${isStar ? 'free' : ''}">${isStar ? '⭐' : num}</div>`;
+                });
+            });
+            popup.innerHTML = `
+                <div class="popup-content">
+                    <div style="background:orange; border-radius:50%; width:40px; height:40px; display:inline-flex; align-items:center; justify-content:center; font-weight:bold; color:white; margin-top:-40px; border:3px solid white;">${cardNum}</div>
+                    <div style="display:grid; grid-template-columns:repeat(5,1fr); gap:6px; margin-top:10px;">
+                        <div style="background:#00FF00; padding:8px; border-radius:4px; color:white; font-weight:bold;">B</div>
+                        <div style="background:#FF0000; padding:8px; border-radius:4px; color:white; font-weight:bold;">I</div>
+                        <div style="background:#FFA500; padding:8px; border-radius:4px; color:white; font-weight:bold;">N</div>
+                        <div style="background:#0000FF; padding:8px; border-radius:4px; color:white; font-weight:bold;">G</div>
+                        <div style="background:#FF00FF; padding:8px; border-radius:4px; color:white; font-weight:bold;">O</div>
+                    </div>
+                    <div class="popup-bingo-grid">${gridHtml}</div>
+                    <div style="display:flex; justify-content:space-between; padding:0 10px;">
+                        <button class="popup-btn popup-btn-accept" onclick="confirmCardSelection(${cardNum})">Accept</button>
+                        <button class="popup-btn popup-btn-cancel" onclick="closeCardPopup()">Cancel</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(popup);
+        }
+
+        function closeCardPopup() {
+            const popup = document.getElementById('cardPopup');
+            if (popup) popup.remove();
+        }
+
+        function confirmCardSelection(cardNum) {
+            closeCardPopup();
+            if (lockCardsEmpty) {
+                showToast('⏳ እባክዎ ይጠብቁ, በመቀየር ላይ...', false);
+                return;
+            }
+            if (!playerId) { showToast('እባክዎን መጀመሪያ ይመዝገቡ', false); return; }
+            const stake = gameState.stake || 0;
+            if (myBalance < stake) { showToast('❌ በቂ ባላንስ የለዎትም!', false); return; }
+            const currentPlayer = findCurrentPlayer();
+            if (!currentPlayer) {
+                sendToServer('getGameState', {});
+                showToast('⏳ Syncing room... tap Accept again shortly.', false);
+                return;
+            }
+            if (gameState.selectedCards.includes(cardNum)) { showToast('ካርድ #' + cardNum + ' አሁን ተመርጧል!', false); return; }
+            if (!Array.isArray(currentPlayer.cards)) currentPlayer.cards = [];
+            if (currentPlayer.cards.includes(cardNum)) { showToast('ይህ ካርድ አስቀድመው መርጠዋል', false); return; }
+            currentPlayer.cards.push(cardNum);
+            document.getElementById('selStatus').textContent = `${currentPlayer.cards.length} ተመርጧል`;
+            renderCards();
+            sendToServer('selectCard', { cardNumber: cardNum });
+        }
+
+        // ============================================================
+        // GAME PLAY
+        // ============================================================
+        function updateGameUI() {
+            document.getElementById('gameStake').textContent = gameState.stake + ' ብር';
+            const totalCardCount = currentGameCards.length;
+            document.getElementById('gameCards').textContent = totalCardCount;
+            const totalPrize = gameState.stake * gameState.totalCardsInPlay * 0.8;
+            document.getElementById('gameDerash').textContent = formatMoney(Math.round(totalPrize)) + ' ብር';
+            document.getElementById('gameCalled').textContent = `${gameState.calledCount || 0}/75`;
+            document.getElementById('gamePlayerName').textContent = `(${playerName})`;
+            const container = document.getElementById('callItemsMini');
+            container.innerHTML = '';
+            const display = (gameState.calledNumbers || []).slice(-6);
+            if (display.length === 0) {
+                const empty = document.createElement('span');
+                empty.className = 'call-chip-mini empty';
+                empty.textContent = '⏳ ቁጥሮች እየተጠሩ ነው...';
+                container.appendChild(empty);
+            } else {
+                display.forEach((num, idx) => {
+                    const letter = getLetterForNumber(num);
+                    const chip = document.createElement('span');
+                    chip.className = 'call-chip-mini called';
+                    if (idx === display.length - 1) chip.classList.add('latest');
+                    chip.textContent = `${letter}${num}`;
+                    container.appendChild(chip);
+                });
+            }
+            const playerCards = currentGameCards.filter(c => String(c.playerId) === String(playerId));
+            if (playerCards.length) {
+                sliderCards = playerCards;
+                if (sliderIndex >= sliderCards.length) sliderIndex = sliderCards.length - 1;
+                if (sliderIndex < 0) sliderIndex = 0;
+                renderSliderCard(sliderCards[sliderIndex], sliderIndex, sliderCards.length);
+            } else {
+                document.getElementById('sliderCardWrapper').innerHTML =
+                    '<div style="text-align:center;color:#999;padding:40px 0;">🎴 No cards in this game</div>';
+                document.getElementById('cardCounter').textContent = '0 / 0';
+            }
+        }
+
+        function renderSliderCard(card, index, total) {
+            const wrapper = document.getElementById('sliderCardWrapper');
+            if (!card) { wrapper.innerHTML = '<div style="text-align:center;color:#999;padding:40px 0;">No cards</div>'; return; }
+            const div = document.createElement('div');
+            div.className = 'user-card-display';
+            const title = document.createElement('div');
+            title.className = 'card-title';
+            title.textContent = `🎴 ካርድ #${card.cardNumber} ${card.bingo ? '🏆' : ''}`;
+            div.appendChild(title);
+            const header = document.createElement('div');
+            header.className = 'bingo-grid-header';
+            ['B', 'I', 'N', 'G', 'O'].forEach(letter => {
+                const span = document.createElement('span');
+                span.textContent = letter;
+                header.appendChild(span);
+            });
+            div.appendChild(header);
+            const grid = document.createElement('div');
+            grid.className = 'bingo-grid';
+            for (let r = 0; r < 5; r++) {
+                for (let c = 0; c < 5; c++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'bingo-cell';
+                    const val = card.board[r][c];
+                    if (val === '★') { cell.textContent = '⭐'; cell.classList.add('free'); }
+                    else { cell.textContent = val; }
+                    if (card.marked && card.marked[r][c]) cell.classList.add('called');
+                    if (card.bingo && card.winningPatterns) {
+                        let isWinning = false;
+                        for (const p of card.winningPatterns) {
+                            if (p.type === 'row' && p.index === r) isWinning = true;
+                            if (p.type === 'column' && p.index === c) isWinning = true;
+                            if (p.type === 'diagonal') {
+                                if (p.index === 0 && r === c) isWinning = true;
+                                if (p.index === 1 && r + c === 4) isWinning = true;
+                            }
+                            if (p.type === 'corner') {
+                                if ((r === 0 || r === 4) && (c === 0 || c === 4)) isWinning = true;
+                            }
+                        }
+                        if (isWinning) cell.classList.add('bingo');
+                    }
+                    grid.appendChild(cell);
+                }
+            }
+            div.appendChild(grid);
+            wrapper.innerHTML = '';
+            wrapper.appendChild(div);
+            document.getElementById('cardCounter').textContent = `${index + 1} / ${total}`;
+            document.getElementById('prevCardBtn').disabled = (index === 0);
+            document.getElementById('nextCardBtn').disabled = (index === total - 1);
+        }
+
+        function slideCard(direction) {
+            const total = sliderCards.length;
+            if (total === 0) return;
+            const newIndex = sliderIndex + direction;
+            if (newIndex < 0 || newIndex >= total) return;
+            sliderIndex = newIndex;
+            renderSliderCard(sliderCards[sliderIndex], sliderIndex, total);
+        }
+
+        function submitCards() {
+            const playersWithCards = players.filter(p => p.cards && p.cards.length > 0);
+            if (playersWithCards.length < 2) {
+                showToast('⏳ በቂ ተጫዋቾች የሉም. በ10 ሰከንድ እንደገና እንጀምራለን...', false);
+                setTimeout(() => resetSelectionAndRestart(), 10000);
+                return;
+            }
+            sendToServer('startGame', {});
+            setTimeout(() => {
+                if (!isGameActive && gameState.status !== 'playing') {
+                    showToast('⏳ ጨዋታው አልተጀመረም. ካርዶች ተሰርዘዋል. በ10 ሰከንድ እንደገና እንጀምራለን...', false);
+                    setTimeout(() => resetSelectionAndRestart(), 10000);
+                }
+            }, 5000);
+        }
+
+        function resetSelectionAndRestart() {
+            lockCardsEmpty = true;
+            if (players && players.length) {
+                players.forEach(p => { p.cards = []; p.selected = []; });
+            }
+            gameState.selectedCards = [];
+            gameState.selectionTimeLeft = 60;
+            document.getElementById('selTimer').textContent = '60';
+            document.getElementById('selTimer').classList.remove('warning');
+            selectionCountdownActive = false;
+            clearInterval(selectionTimer);
+            renderCards();
+            sendToServer('resetSelection', {});
+            setTimeout(() => {
+                sendToServer('startSelection', { stake: gameState.stake });
+                showGameSelection();
+                renderCards();
+                startSelectionCountdown(60);
+                setTimeout(() => sendToServer('getGameState', {}), 500);
+                setTimeout(() => { lockCardsEmpty = false; renderCards(); }, 4000);
+            }, 1000);
+        }
+
+        function refreshGameState() {
+            showToast('🔄 Refreshing...');
+            sendToServer('getGameState', {});
+        }
+
+        // ============================================================
+        // WINNING OVERLAY
+        // ============================================================
+        function showWinningOverlay(winners, prizePerWinner) {
+            document.getElementById('winAmountDisplay').textContent = formatMoney(prizePerWinner);
+            const listContainer = document.getElementById('winnerListContainer');
+            listContainer.innerHTML = '';
+            winners.forEach(w => {
+                const entry = document.createElement('div');
+                entry.className = 'winner-entry';
+                const patternLabels = w.patterns && w.patterns.length ? w.patterns.map(p => p.label).join(', ') : 'BINGO!';
+                entry.innerHTML = `<span class="win-user">${w.playerName || 'Player'}</span><span class="win-card-num">#${w.cardNumber}</span><span class="win-pattern">${patternLabels}</span>`;
+                listContainer.appendChild(entry);
+            });
+            document.getElementById('winningMessage').textContent = '🏆 አሸናፊዎች ተገኝተዋል!';
+            const boardContainer = document.getElementById('winBoardContainer');
+            boardContainer.innerHTML = '';
+            const currentWinner = winners.find(w => String(w.playerId) === String(playerId) || String(w.user_id) === String(playerId));
+            if (currentWinner) {
+                const grid = document.createElement('div');
+                grid.className = 'bingo-grid';
+                const board = currentWinner.board;
+                const marked = currentWinner.marked;
+                for (let r = 0; r < 5; r++) {
+                    for (let c = 0; c < 5; c++) {
+                        const cell = document.createElement('div');
+                        cell.className = 'bingo-cell';
+                        const val = board[r][c];
+                        if (val === '★') { cell.textContent = '⭐'; cell.classList.add('free'); }
+                        else { cell.textContent = val; }
+                        if (marked && marked[r][c]) cell.classList.add('called');
+                        let isWinning = false;
+                        if (currentWinner.patterns) {
+                            for (const p of currentWinner.patterns) {
+                                if (p.type === 'row' && p.index === r) isWinning = true;
+                                if (p.type === 'column' && p.index === c) isWinning = true;
+                                if (p.type === 'diagonal') {
+                                    if (p.index === 0 && r === c) isWinning = true;
+                                    if (p.index === 1 && r + c === 4) isWinning = true;
+                                }
+                                if (p.type === 'corner') {
+                                    if ((r === 0 || r === 4) && (c === 0 || c === 4)) isWinning = true;
+                                }
+                            }
+                        }
+                        if (isWinning) cell.classList.add('bingo');
+                        grid.appendChild(cell);
+                    }
+                }
+                boardContainer.appendChild(grid);
+            } else {
+                boardContainer.innerHTML = '<div style="color:#aaa;text-align:center;padding:12px;">የእርስዎ ካርድ አላሸነፈም</div>';
+            }
+            const overlay = document.getElementById('winningOverlay');
+            overlay.classList.add('show');
+            let countdown = 10;
+            const countdownEl = document.getElementById('winCountdown');
+            countdownEl.textContent = countdown;
+            clearInterval(winCountdownTimer);
+            winCountdownTimer = setInterval(() => {
+                countdown--;
+                countdownEl.textContent = countdown;
+                if (countdown <= 0) {
+                    clearInterval(winCountdownTimer);
+                    overlay.classList.remove('show');
+                    showGameLobby();
+                    switchTab('game');
+                }
+            }, 1000);
+        }
+
+        // ============================================================
+        // HELPERS
+        // ============================================================
+        function updatePlayerUI() {
+            document.getElementById('headerBalance').textContent = formatMoney(myBalance);
+            if (document.getElementById('walletBalance')) {
+                document.getElementById('walletBalance').textContent = formatMoney(myBalance) + ' ብር';
+            }
+            document.getElementById('selStake').textContent = (gameState.stake || 0) + ' ብር';
+            const totalSelected = gameState.selectedCards ? gameState.selectedCards.length : 0;
+            document.getElementById('selCount').textContent = totalSelected;
+            document.getElementById('globalSelCount').textContent = totalSelected + ' ካርዶች';
+            document.getElementById('selGameNum').textContent = playerStats.gamesPlayed || 0;
+            if (document.getElementById('page-profile').classList.contains('active')) updateProfileUI();
+            checkAdminStatus();
+        }
+
+        function updateStatsUI() {
+            const gEl = document.getElementById('gamesPlayed');
+            const wEl = document.getElementById('winsCount');
+            if (gEl) gEl.textContent = playerStats.gamesPlayed || 0;
+            if (wEl) wEl.textContent = playerStats.wins || 0;
+        }
+
+        function formatMoney(amount) { return (amount || 0).toLocaleString('en-US'); }
+
+        function getLetterForNumber(num) {
+            if (num === '★' || typeof num === 'string') return '';
+            const idx = Math.floor((num - 1) / 15);
+            return ['B', 'I', 'N', 'G', 'O'][idx] || '?';
+        }
+
+        function showToast(message, isSuccess = true) {
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.style.background = isSuccess ? 'linear-gradient(135deg, #2E7D32, #1B5E20)' : 'linear-gradient(135deg, #C62828, #B71C1C)';
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            setTimeout(() => {
+                toast.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateX(-50%) translateY(-20px)';
+                setTimeout(() => toast.remove(), 500);
+            }, 3000);
+        }
+
+        function handleDepositStatus(data) {
+            const statusEl = document.getElementById('depositStatus');
+            if (data.status === 'confirmed') {
+                if (data.newBalance !== undefined) myBalance = Number(data.newBalance);
+                else refreshBalance();
+                document.getElementById('headerBalance').textContent = formatMoney(myBalance);
+                statusEl.innerHTML = `✅ <b>Deposit Successful!</b> ${data.amount || ''} Birr added.`;
+                showToast('✅ Deposit confirmed!');
+            } else if (data.status === 'rejected') {
+                statusEl.innerHTML = `❌ <b>Deposit Rejected.</b> ${data.message || 'Please try again.'}`;
+                showToast('❌ Deposit rejected: ' + (data.message || ''), false);
+            } else if (data.status === 'pending') {
+                statusEl.innerHTML = '⏳ <b>Processing...</b> Waiting for admin approval.';
+            }
+        }
+
+        // ============================================================
+        // REGISTRATION
+        // ============================================================
+        async function autoRegisterOrLogin() {
+            if (isRegistering) return;
+            isRegistering = true;
+            const savedPlayerId = localStorage.getItem('mbingo_playerId');
+            if (savedPlayerId) {
+                playerId = savedPlayerId;
+                try {
+                    if (!ws || ws.readyState !== WebSocket.OPEN) await new Promise(r => setTimeout(r, 2000));
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        sendToServer('auth', { userId: playerId });
+                        isRegistering = false;
+                        updatePlayerUI();
+                        refreshBalance();
+                        return;
+                    }
+                } catch (e) {}
+            }
+            if (window.Telegram && window.Telegram.WebApp) {
+                const tg = window.Telegram.WebApp;
+                tg.ready();
+                const user = tg.initDataUnsafe?.user;
+                if (user) {
+                    await completeRegistration(user.id, user.first_name || 'Player', user.username || null, null);
+                    return;
+                }
+            }
+            showBrowserRegistrationModal();
+            isRegistering = false;
+        }
+
+        function showBrowserRegistrationModal() {
+            const overlay = document.createElement('div');
+            overlay.style.cssText = `position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:1000;display:flex;align-items:center;justify-content:center;`;
+            overlay.id = 'browserRegisterOverlay';
+            overlay.innerHTML = `
+                <div style="background:linear-gradient(135deg,#1a1a2e,#16213e);border-radius:24px;padding:40px 30px;max-width:400px;width:90%;border:2px solid var(--gold);box-shadow:0 20px 60px rgba(0,0,0,0.8);">
+                    <div style="font-size:48px;margin-bottom:12px;">🎯</div>
+                    <h2 style="color:var(--gold);font-size:22px;margin-bottom:16px;">Welcome to Bingo Game!</h2>
+                    <p style="color:#aaa;font-size:14px;margin-bottom:20px;">Enter your name to create an account.</p>
+                    <input id="browserNameInput" type="text" placeholder="Enter your name..." style="width:100%;padding:14px 18px;border-radius:12px;border:2px solid #333;background:#0f0f1f;color:white;font-size:16px;margin-bottom:16px;font-family:inherit;outline:none;">
+                    <button onclick="submitBrowserRegistration()" style="background:linear-gradient(135deg,var(--gold),var(--gold-dark));color:var(--primary);border:none;padding:16px;border-radius:14px;font-size:18px;font-weight:700;cursor:pointer;width:100%;font-family:inherit;">✅ Register</button>
+                </div>
+            `;
+            document.body.appendChild(overlay);
+            setTimeout(() => document.getElementById('browserNameInput')?.focus(), 300);
+        }
+
+        function submitBrowserRegistration() {
+            const input = document.getElementById('browserNameInput');
+            const name = input?.value?.trim();
+            if (!name || name.length < 2) { showToast('❌ Please enter a valid name (at least 2 characters)', false); return; }
+            document.getElementById('browserRegisterOverlay')?.remove();
+            const telegramId = Date.now() + Math.floor(Math.random() * 1000);
+            const firstName = name;
+            const username = 'browser_user';
+            completeRegistration(telegramId, firstName, username, null);
+        }
+
+        async function completeRegistration(telegramId, firstName, username, phoneNumber) {
+            try {
+                const response = await fetch(`${CONFIG.API_URL}/api/users/register`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, mode: 'cors',
+                    body: JSON.stringify({
+                        telegramId, username: username || firstName.toLowerCase().replace(/\s/g, '_'),
+                        firstName, lastName: '', phone: phoneNumber || '',
+                        telegramInitData: window.Telegram?.WebApp?.initData || ''
+                    })
+                });
+                const result = await response.json();
+                if (result.success && result.user) {
+                    playerId = result.user.id;
+                    localStorage.setItem('mbingo_playerId', playerId);
+                    myBalance = Number(result.user.balance || 0);
+                    playerName = result.user.first_name || firstName || 'Player';
+                    document.getElementById('headerBalance').textContent = formatMoney(myBalance);
+                    if (ws && ws.readyState === WebSocket.OPEN) sendToServer('auth', { userId: playerId });
+                    else { connectWebSocket(); setTimeout(() => sendToServer('auth', { userId: playerId }), 1000); }
+                    showToast(`✅ እንኳን ደህና መጡ ${firstName}!`);
+                    renderCards();
+                    updatePlayerUI();
+                } else {
+                    showToast('❌ Registration failed: ' + (result.message || result.error || ''), false);
+                }
+            } catch (error) { showToast('❌ Registration error: ' + error.message, false); }
+        }
+
+        // ============================================================
+        // CARDS LOADING
+        // ============================================================
+        async function loadCardsFromAPI() {
+            try {
+                const response = await fetch(`${CONFIG.API_URL}/api/cards`, { mode: 'cors' });
+                const cards = await response.json();
+                if (cards && cards.length) { BOARDS = cards.map(card => card.board); return true; }
+                else { BOARDS = generateBoards(); return false; }
+            } catch (error) { BOARDS = generateBoards(); return false; }
+        }
+
+        function generateBoards() {
+            const boards = [];
+            for (let b = 1; b <= 200; b++) {
+                const board = [];
+                for (let row = 0; row < 5; row++) {
+                    const rowData = [];
+                    for (let col = 0; col < 5; col++) {
+                        if (col === 2 && row === 2) { rowData.push('★'); }
+                        else {
+                            const min = col * 15 + 1;
+                            const seed = (b * 7 + row * 13 + col * 31) % 15;
+                            rowData.push(min + seed);
+                        }
+                    }
+                    board.push(rowData);
+                }
+                boards.push(board);
+            }
+            return boards;
+        }
+
+        // ============================================================
+        // GLOBAL EXPOSURE
+        // ============================================================
+        window.switchTab = switchTab;
+        window.createRoom = createRoom;
+        window.showWalletSub = showWalletSub;
+        window.setDepositMethod = setDepositMethod;
+        window.copyPaymentDetails = copyPaymentDetails;
+        window.submitDepositVerification = submitDepositVerification;
+        window.submitWithdraw = submitWithdraw;
+        window.onWithdrawMethodChange = onWithdrawMethodChange;
+        window.copyReferral = copyReferral;
+        window.adminLogin = adminLogin;
+        window.adminLogout = adminLogout;
+        window.approveDeposit = approveDeposit;
+        window.rejectDeposit = rejectDeposit;
+        window.approveWithdrawal = approveWithdrawal;
+        window.rejectWithdrawal = rejectWithdrawal;
+        window.adminBan = adminBan;
+        window.slideCard = slideCard;
+        window.refreshGameState = refreshGameState;
+        window.leaveSelection = leaveSelection;
+        window.leaveGame = leaveGame;
+        window.refreshLobby = refreshLobby;
+        window.confirmCardSelection = confirmCardSelection;
+        window.closeCardPopup = closeCardPopup;
+        window.fetchCommissionTotal = fetchCommissionTotal;
+        window.refreshBalance = refreshBalance;
+
+        console.log('✅ M-BINGO v13 loaded');
+    </script>
+</body>
+</html>
