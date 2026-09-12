@@ -1136,26 +1136,34 @@
         }
 
         async function fetchTransactions() {
-            const container = document.getElementById('transactionList');
-            try {
-                const res = await fetch(`${CONFIG.API_URL}/api/transactions/${playerId}`, { mode: 'cors' });
-                const data = await res.json();
-                if (data.success && data.transactions.length) {
-                    let html = '';
-                    data.transactions.slice(0, 20).forEach(t => {
-                        const type = t.type === 'deposit' ? '💰 Deposit' : t.type === 'withdraw' ? '📤 Withdraw' : '🔄 Transfer';
-                        const sign = t.type === 'deposit' ? '+' : '-';
-                        html += `<div class="entry">${type}: ${sign}${formatMoney(t.amount)} (${t.status || 'PENDING'})</div>`;
-                    });
-                    container.innerHTML = html;
-                } else {
-                    container.innerHTML = '<div class="text-muted text-sm">No transactions found.</div>';
-                }
-            } catch (e) {
-                container.innerHTML = '<div class="text-muted text-sm">Could not load transactions.</div>';
-            }
-        }
+    const container = document.getElementById('transactionList');
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/transactions/${playerId}`, { mode: 'cors' });
+        const data = await res.json();
+        if (data.success && data.transactions.length) {
+            let html = '';
+            data.transactions.slice(0, 20).forEach(t => {
+                const typeUpper = String(t.type || '').toUpperCase();
+                let label = '🔄 Transfer';
+                if (typeUpper.includes('DEPOSIT')) label = '💰 Deposit';
+                else if (typeUpper.includes('WITHDRAW')) label = '📤 Withdraw';
+                else if (typeUpper.includes('TRANSFER')) label = '🔄 Transfer';
+                else if (typeUpper.includes('GAME_STAKE')) label = '🎮 Game Stake';
+                else if (typeUpper.includes('GAME_WIN')) label = '🏆 Game Win';
+                else if (typeUpper.includes('SIGNUP_BONUS')) label = '🎁 Signup Bonus';
 
+                const sign = typeUpper.includes('DEPOSIT') || typeUpper.includes('WIN') || typeUpper.includes('BONUS') ? '+' : '-';
+                html += `<div class="entry">${label}: ${sign}${formatMoney(t.amount)}</div>`;
+            });
+            container.innerHTML = html;
+        } else {
+            container.innerHTML = '<div class="text-muted text-sm">No transactions found.</div>';
+        }
+    } catch (e) {
+        container.innerHTML = '<div class="text-muted text-sm">Could not load transactions.</div>';
+    }
+}
+        
         function copyReferral() {
             const link = `https://t.me/${CONFIG.BOT_USERNAME}?start=ref_${playerId}`;
             if (navigator.clipboard) navigator.clipboard.writeText(link).then(() => showToast('✅ Copied!'));
