@@ -750,6 +750,18 @@ async function handleStart(msg, match) {
     try {
         const response = await axios.get(`${API_URL}/api/users/${userId}`);
         if (response.data.user) {
+            // ⭐ Check if they are missing a phone number
+            if (!response.data.user.phoneNumber) {
+                await bot.sendMessage(chatId, '⚠️ Your account is missing a phone number. Please share your contact to enable transfers and withdrawals.', {
+                    reply_markup: {
+                        keyboard: [[{ text: "📱 Share Contact", request_contact: true }]],
+                        resize_keyboard: true,
+                        one_time_keyboard: true
+                    }
+                });
+                return;
+            }
+
             const balance = await getUserBalance(userId);
             const isAdmin = userId.toString() === ADMIN_TELEGRAM_ID;
             const welcomeBack = `👋 <b>Welcome back, ${firstName}!</b>${isAdmin ? ' 👑' : ''}\n\n` +
@@ -852,35 +864,47 @@ async function handleWithdraw(msg) {
         });
     });
 }
+
+// ⭐ UPDATED: Accepts Phone OR Telegram ID
 async function handleTransfer(msg) {
     const chatId = msg.chat.id;
     const userId = msg.from.id;
     
-    await bot.sendMessage(chatId, '🔄 <b>Transfer Funds</b>\n\nPlease enter the recipient\'s <b>Phone Number</b> (e.g. 0912345678).', { parse_mode: 'HTML' });
+    await bot.sendMessage(chatId, '🔄 <b>Transfer Funds</b>\n\nPlease enter the recipient\'s <b>Phone Number</b> (e.g. 0912345678) OR their <b>Telegram ID</b>.', { parse_mode: 'HTML' });
     
     bot.once('text', async (msg2) => {
-        // ⭐ Use the normalizePhone function here
-        const phone = normalizePhone(msg2.text);
-        
-        if (!phone || phone.length < 10) {
-            await bot.sendMessage(chatId, '❌ Invalid phone number format. Use 09xxxxxxxx.');
-            return;
-        }
-
+        const input = msg2.text.trim();
         let recipientId;
         let recipientName;
 
-        try {
-            // ⭐ Search using the normalized phone
-            const response = await axios.get(`${API_URL}/api/users/by-phone/${phone}`);
-            recipientId = response.data.user.id;
-            recipientName = response.data.user.first_name;
-        } catch (error) {
-            // ⭐ If NOT registered, send invite link
-            await bot.sendMessage(chatId,
-                `❌ Phone number <b>${phone}</b> is not registered on M-BINGO.\n\n📩 <b>Invite them to join!</b>\nShare this link so they can register and receive funds:\nhttps://t.me/M_bingo_bot?start=ref_${userId}`,
-                { parse_mode: 'HTML' });
-            return;
+        // If it looks like a phone number (10+ digits), normalize and search by phone
+        if (/^[0-9+]{10,13}$/.test(input.replace(/\s/g, ''))) {
+            const phone = normalizePhone(input);
+            
+            try {
+                const response = await axios.get(`${API_URL}/api/users/by-phone/${phone}`);
+                recipientId = response.data.user.id;
+                recipientName = response.data.user.first_name;
+            } catch (error) {
+                if (error.response?.status === 404) {
+                    await bot.sendMessage(chatId,
+                        `❌ Phone number <b>${phone}</b> is not registered on M-BINGO.\n\n📩 <b>Invite them to join!</b>\nShare this link so they can register and receive funds:\nhttps://t.me/M_bingo_bot?start=ref_${userId}`,
+                        { parse_mode: 'HTML' });
+                } else {
+                    await bot.sendMessage(chatId, `⚠️ Server error while searching for phone number. Please try transferring by Telegram ID instead.`);
+                }
+                return;
+            }
+        } else {
+            // Otherwise, assume it's a Telegram ID
+            try {
+                const response = await axios.get(`${API_URL}/api/users/${input}`);
+                recipientId = response.data.user.id;
+                recipientName = response.data.user.firstName;
+            } catch (error) {
+                await bot.sendMessage(chatId, `❌ User with ID <b>${input}</b> is not registered on M-BINGO.`, { parse_mode: 'HTML' });
+                return;
+            }
         }
 
         // If registered, ask for amount
@@ -908,7 +932,7 @@ async function handleTransfer(msg) {
             
             try {
                 await axios.post(`${API_URL}/api/transfer`, { fromId: userId, toId: recipientId, amount });
-                await bot.sendMessage(chatId, `✅ Successfully transferred <b>${formatCurrency(amount)}</b> to ${recipientName} (${phone}).`, { parse_mode: 'HTML' });
+                await bot.sendMessage(chatId, `✅ Successfully transferred <b>${formatCurrency(amount)}</b> to ${recipientName}.`, { parse_mode: 'HTML' });
             } catch (e) {
                 const errMsg = e.response?.data?.message || 'Transfer failed.';
                 await bot.sendMessage(chatId, `❌ ${errMsg}`);
@@ -916,6 +940,7 @@ async function handleTransfer(msg) {
         });
     });
 }
+
 async function handleBonus(msg) {
     const chatId = msg.chat.id;
     const userId = msg.from.id;
@@ -971,7 +996,6 @@ async function handleProfile(msg) {
     } catch { await bot.sendMessage(chatId, '⚠️ Could not fetch profile.'); }
 }
 
-// ⭐ Update handleHelp to conditionally show admin commands
 async function handleHelp(msg) {
     const chatId = msg.chat.id;
     const userId = msg.from.id;
@@ -987,6 +1011,7 @@ async function handleHelp(msg) {
 /deposit - Make a deposit
 /withdraw - Withdraw funds
 /transfer - Transfer funds
+/myphone - Update your phone number
 /bonus - Invite friends and earn bonus
 /history - Transaction history
 /profile - Your profile
@@ -1028,6 +1053,19 @@ async function handleHelp(msg) {
 
     await bot.sendMessage(chatId, helpText, { parse_mode: 'HTML' });
 }
+
+// ⭐ NEW COMMAND: /myphone
+bot.onText(/\/myphone/, async (msg) => {
+    const chatId = msg.chat.id;
+    await bot.sendMessage(chatId, '📱 <b>Update Phone Number</b>\n\nPlease click the button below to share your phone number. This is required to receive transfers from other players.', {
+        parse_mode: 'HTML',
+        reply_markup: {
+            keyboard: [[{ text: "📱 Share Contact", request_contact: true }]],
+            resize_keyboard: true,
+            one_time_keyboard: true
+        }
+    });
+});
 
 // Register player commands
 bot.onText(/\/start(?:\s+ref_(\d+))?/, handleStart);
@@ -1246,7 +1284,7 @@ bot.on('text', async (msg) => {
 });
 
 // ============================================================
-// CONTACT HANDLER (registration)
+// CONTACT HANDLER (registration & phone update)
 // ============================================================
 bot.on('contact', async (msg) => {
     const chatId = msg.chat.id;
@@ -1261,30 +1299,42 @@ bot.on('contact', async (msg) => {
         return;
     }
 
-    try {
-        const response = await axios.get(`${API_URL}/api/users/${userId}`);
-        if (response.data.user) { await bot.sendMessage(chatId, '✅ You are already registered!'); return; }
-    } catch {}
-
     const referralId = bot._referralMap ? bot._referralMap[userId] : null;
+    
+    // ⭐ Normalize the phone number
     const formattedPhone = normalizePhone(contact.phone_number);
 
     try {
-        // ⭐ Pass formattedPhone instead of raw contact.phone_number
+        // ⭐ Check if they are already registered
+        let isAlreadyRegistered = false;
+        try {
+            const res = await axios.get(`${API_URL}/api/users/${userId}`);
+            if (res.data.user) isAlreadyRegistered = true;
+        } catch (e) {}
+
+        // ⭐ This will UPDATE their phone number if they are already registered
         const user = await getOrCreateUser(userId, firstName, lastName, username, referralId, formattedPhone);
+        
         if (user) {
-            if (referralId) {
-                try {
-                    await axios.post(`${API_URL}/api/referral/process`, { referrerId: referralId, newUserId: userId });
-                    await bot.sendMessage(referralId, `🎉 You earned ${REFERRAL_BONUS} Birr bonus! Someone registered using your referral link.`);
-                } catch {}
+            if (isAlreadyRegistered) {
+                // They just updated their phone number
+                await bot.sendMessage(chatId, '✅ <b>Phone number updated successfully!</b>\n\nYou can now use transfers and withdrawals.', { parse_mode: 'HTML', reply_markup: { remove_keyboard: true } });
+                await bot.sendMessage(chatId, '🎯 <b>Welcome back!</b>', { parse_mode: 'HTML', ...mainMenu(userId) });
+            } else {
+                // New user registration
+                if (referralId) {
+                    try {
+                        await axios.post(`${API_URL}/api/referral/process`, { referrerId: referralId, newUserId: userId });
+                        await bot.sendMessage(referralId, `🎉 You earned ${REFERRAL_BONUS} Birr bonus! Someone registered using your referral link.`);
+                    } catch {}
+                }
+                const welcome = `✅ <b>Registration Successful!</b>\n\n🎯 Welcome to M-BINGO, ${firstName}!\n💰 You have received a <b>50 Birr</b> starting balance.\n\n👇 <b>Select an option below to start playing!</b>`;
+                await bot.sendMessage(chatId, '✅ Registration complete!', { reply_markup: { remove_keyboard: true } });
+                await bot.sendMessage(chatId, welcome, { parse_mode: 'HTML', ...mainMenu(userId) });
+                await bot.sendMessage(ADMIN_TELEGRAM_ID,
+                    `🆕 <b>New User Registered!</b>\n\n👤 Name: ${firstName}\n🆔 ID: ${userId}\n📱 Username: @${username}\n📞 Phone: ${formattedPhone}`,
+                    { parse_mode: 'HTML' });
             }
-            const welcome = `✅ <b>Registration Successful!</b>\n\n🎯 Welcome to M-BINGO, ${firstName}!\n💰 You have received a <b>50 Birr</b> starting balance.\n\n👇 <b>Select an option below to start playing!</b>`;
-            await bot.sendMessage(chatId, '✅ Registration complete!', { reply_markup: { remove_keyboard: true } });
-            await bot.sendMessage(chatId, welcome, { parse_mode: 'HTML', ...mainMenu(userId) });
-            await bot.sendMessage(ADMIN_TELEGRAM_ID,
-                `🆕 <b>New User Registered!</b>\n\n👤 Name: ${firstName}\n🆔 ID: ${userId}\n📱 Username: @${username}\n📞 Phone: ${formattedPhone}`,
-                { parse_mode: 'HTML' });
         }
     } catch { await bot.sendMessage(chatId, '❌ Registration failed. Please try again later.'); }
 });
