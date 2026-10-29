@@ -881,16 +881,33 @@ app.get('/api/users/by-username/:username', async (req, res) => {
 
 app.post('/api/transfer', async (req, res) => {
   const { fromId, toId, amount } = req.body;
-  const transferAmount = Number(amount);
   
-  if (transferAmount > 500) {
-    return res.status(400).json({ success: false, message: 'Maximum transfer amount is 500 Birr' });
-  }
-
   try {
-    await wallet.transferBalance(fromId, toId, transferAmount);
+    // ⭐ Look up the actual users to get their UUIDs
+    const sender = await findUser(fromId);
+    const recipient = await findUser(toId);
+
+    if (!sender) return res.status(404).json({ success: false, message: 'Sender not found' });
+    if (!recipient) return res.status(404).json({ success: false, message: 'Recipient not found' });
+
+    const transferAmount = Number(amount);
+    
+    // ⭐ Enforce 500 Birr Max
+    if (transferAmount > 500) {
+      return res.status(400).json({ success: false, message: 'Maximum transfer amount is 500 Birr' });
+    }
+    if (transferAmount <= 0) {
+      return res.status(400).json({ success: false, message: 'Invalid transfer amount' });
+    }
+
+    // ⭐ Pass the Database UUIDs instead of Telegram IDs
+    await wallet.transferBalance(sender.id, recipient.id, transferAmount);
     res.json({ success: true, message: 'Transfer successful' });
-  } catch (e) { res.status(400).json({ success: false, message: e.message }); }
+    
+  } catch (e) { 
+    console.error('Transfer error:', e);
+    res.status(400).json({ success: false, message: e.message }); 
+  }
 });
 
 app.get('/api/transactions/:userId', async (req, res) => {
