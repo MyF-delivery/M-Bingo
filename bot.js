@@ -1216,6 +1216,73 @@ async function handleAICommand(msg) {
             await bot.sendMessage(chatId, `✅ Sent:${res.sent} Failed:${res.failed}`);
         }
 
+                    else if (text === '/ai_invite_contacts') {
+            await bot.sendMessage(chatId, '🔍 Fetching your Telegram contacts...');
+            
+            const contacts = await inviter.getContacts();
+            if (!contacts || contacts.length === 0) {
+                return bot.sendMessage(chatId, '❌ No contacts found or userbot is offline.');
+            }
+
+            // Get list of registered Telegram IDs from DB to avoid inviting existing players
+            const dbUsers = await pool.query(`SELECT telegram_id FROM users`);
+            const registeredIds = new Set(dbUsers.rows.map(r => String(r.telegram_id)));
+
+            // Filter contacts: Must have a name, not be a bot, not be yourself, and not already registered
+            const targetContacts = contacts.filter(c => 
+                c.firstName && 
+                !c.bot && 
+                String(c.id) !== String(ADMIN_TELEGRAM_ID) && 
+                !registeredIds.has(String(c.id))
+            );
+
+            if (targetContacts.length === 0) {
+                return bot.sendMessage(chatId, '✅ All your contacts are already registered or no valid contacts found.');
+            }
+
+            await bot.sendMessage(chatId, `🤖 Found ${targetContacts.length} potential players. Starting AI campaign (sending 1 message every 45 seconds to prevent ban)...`);
+
+            let sent = 0;
+            let failed = 0;
+
+            // Process them one by one
+            for (const contact of targetContacts) {
+                try {
+                    // 1. Ask AI to generate a personalized message
+                    const sysPrompt = "You are a friendly marketer for an Ethiopian bingo game. Write a very short (max 2 sentences), exciting Amharic message inviting the user to play and win real money. Include the link {LINK}.";
+                    const usrPrompt = `Write an invitation for ${contact.firstName}.`;
+                    
+                    let aiMessage = await askAI(sysPrompt, usrPrompt);
+                    
+                    // Fallback if AI fails
+                    if (!aiMessage) {
+                        aiMessage = `ሰላም ${contact.firstName}! 🎉 በM-BINGO ጨዋታ ተቀላቅለው እውነተኛ ገንዘብ ያሸንፉ! 👉 https://t.me/M_bingo_bot?start=ref_${ADMIN_TELEGRAM_ID}`;
+                    } else {
+                        // Replace placeholder with actual link
+                        aiMessage = aiMessage.replace(/{LINK}/g, `https://t.me/M_bingo_bot?start=ref_${ADMIN_TELEGRAM_ID}`);
+                    }
+
+                    // 2. Send the message using the User Client
+                    const ok = await inviter.sendDM(contact.id, aiMessage);
+                    if (ok) {
+                        sent++;
+                        console.log(`✅ Sent invite to ${contact.firstName}`);
+                    } else {
+                        failed++;
+                    }
+
+                    // 3. Wait 45 seconds to avoid Telegram Spam Limits (PEER_FLOOD)
+                    await new Promise(r => setTimeout(r, 45000));
+
+                } catch (e) {
+                    console.error('Contact invite error:', e.message);
+                    failed++;
+                }
+            }
+
+            await bot.sendMessage(chatId, `📢 Contact Campaign Complete!\n✅ Sent: ${sent}\n❌ Failed: ${failed}\n\nNote: Some messages may fail if the user has strict privacy settings.`);
+        }
+                        
         else {
             await bot.sendMessage(chatId, '❓ Unknown /ai_ command. Try /help.');
         }
