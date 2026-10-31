@@ -28,6 +28,7 @@ async function init() {
     try {
         client = new TelegramClient(new StringSession(SESSION), API_ID, API_HASH, {
             connectionRetries: 5,
+            useWSS: true, // Required for Render
         });
         await client.connect();
         ready = true;
@@ -75,4 +76,23 @@ async function sendManyDMs(ids, message, delayMs = 2500) {
     return { sent, failed };
 }
 
-module.exports = { init, isReady, inviteToGroup, sendDM, sendManyDMs };
+// ⭐ NEW FUNCTION: Fetch contacts
+async function getContacts() {
+    if (!ready) {
+        logError('Client not ready to fetch contacts');
+        return [];
+    }
+    try {
+        // hash: 0 forces Telegram to send the full contact list (not a cached delta)
+        const result = await client.invoke(new Api.contacts.GetContacts({ hash: 0 }));
+        log(`✅ Fetched ${result.users.length} contacts from Telegram.`);
+        
+        // Filter out bots and deleted accounts
+        return result.users.filter(user => !user.bot && !user.deleted) || [];
+    } catch (e) {
+        logError('getContacts failed:', e.message);
+        return [];
+    }
+}
+
+module.exports = { init, isReady, inviteToGroup, sendDM, sendManyDMs, getContacts };
