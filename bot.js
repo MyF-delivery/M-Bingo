@@ -7,6 +7,7 @@
 //       promo poster, user inviter / DM (from ai-agent.js)
 // PLUS: AI Player Management (enable/disable, cards, balances, deposits)
 // PLUS: Phone Number Transfers with 500 Birr limit
+// PLUS: AI Contact Inviter
 // ============================================================
 
 const TelegramBot = require('node-telegram-bot-api');
@@ -86,6 +87,7 @@ try {
         inviteToGroup: async () => false,
         sendDM:        async () => false,
         sendManyDMs:   async () => ({ sent: 0, failed: 0 }),
+        getContacts:   async () => [],
     };
 }
 
@@ -1035,6 +1037,7 @@ async function handleHelp(msg) {
 /ai_invite_all - Start continuous invite-all loop
 /ai_invite_stop - Stop invite-all
 /ai_invite_status - Invite-all status
+/ai_invite_contacts - Invite your phone contacts using AI
 /ai_dm &lt;id&gt; &lt;msg&gt; - DM one user (from user account)
 /ai_dm_all &lt;msg&gt; - DM all active users
 `;
@@ -1216,7 +1219,7 @@ async function handleAICommand(msg) {
             await bot.sendMessage(chatId, `✅ Sent:${res.sent} Failed:${res.failed}`);
         }
 
-                    else if (text === '/ai_invite_contacts') {
+        else if (text === '/ai_invite_contacts') {
             await bot.sendMessage(chatId, '🔍 Fetching your Telegram contacts...');
             
             const contacts = await inviter.getContacts();
@@ -1249,7 +1252,7 @@ async function handleAICommand(msg) {
             for (const contact of targetContacts) {
                 try {
                     // 1. Ask AI to generate a personalized message
-                    const sysPrompt = "You are a friendly marketer for an Ethiopian bingo game. Write a very short (max 2 sentences), exciting Amharic message inviting the user to play and win real money. Include the link {LINK}.";
+                    const sysPrompt = `You are a friendly marketer for an Ethiopian bingo game. Write a very short (max 2 sentences), exciting Amharic message inviting the user to play and win real money. Include the link {LINK}. Use different greetings and emojis each time.`;
                     const usrPrompt = `Write an invitation for ${contact.firstName}.`;
                     
                     let aiMessage = await askAI(sysPrompt, usrPrompt);
@@ -1260,6 +1263,10 @@ async function handleAICommand(msg) {
                     } else {
                         // Replace placeholder with actual link
                         aiMessage = aiMessage.replace(/{LINK}/g, `https://t.me/M_bingo_bot?start=ref_${ADMIN_TELEGRAM_ID}`);
+                        // Ensure link exists
+                        if (!aiMessage.includes('https://t.me/')) {
+                            aiMessage += `\n👉 https://t.me/M_bingo_bot?start=ref_${ADMIN_TELEGRAM_ID}`;
+                        }
                     }
 
                     // 2. Send the message using the User Client
@@ -1282,7 +1289,7 @@ async function handleAICommand(msg) {
 
             await bot.sendMessage(chatId, `📢 Contact Campaign Complete!\n✅ Sent: ${sent}\n❌ Failed: ${failed}\n\nNote: Some messages may fail if the user has strict privacy settings.`);
         }
-                        
+
         else {
             await bot.sendMessage(chatId, '❓ Unknown /ai_ command. Try /help.');
         }
