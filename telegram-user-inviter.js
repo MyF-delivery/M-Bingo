@@ -1,9 +1,5 @@
 // ============================================================
 // telegram-user-inviter.js
-// Runs a real Telegram USER account (MTProto via GramJS) that
-// invites users to a group and sends DMs on behalf of the admin.
-// Requires: npm install telegram
-// Env: TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_SESSION
 // ============================================================
 
 const { TelegramClient } = require('telegram');
@@ -76,19 +72,27 @@ async function sendManyDMs(ids, message, delayMs = 2500) {
     return { sent, failed };
 }
 
-// ⭐ NEW FUNCTION: Fetch contacts
+// ⭐ IMPROVED FUNCTION: Fetch contacts
 async function getContacts() {
     if (!ready) {
         logError('Client not ready to fetch contacts');
         return [];
     }
     try {
-        // hash: 0 forces Telegram to send the full contact list (not a cached delta)
-        const result = await client.invoke(new Api.contacts.GetContacts({ hash: 0 }));
-        log(`✅ Fetched ${result.users.length} contacts from Telegram.`);
+        // GramJS's built-in getContacts handles pagination perfectly
+        const contacts = await client.getContacts();
+        log(`✅ Fetched ${contacts.length} contacts from Telegram.`);
         
-        // Filter out bots and deleted accounts
-        return result.users.filter(user => !user.bot && !user.deleted) || [];
+        // Filter to keep only real users (no bots, no deleted accounts, no groups)
+        const validUsers = contacts.filter(user => 
+            user.className === 'User' && 
+            !user.bot && 
+            !user.deleted && 
+            user.firstName
+        );
+        
+        log(`✅ Found ${validUsers.length} valid human contacts.`);
+        return validUsers;
     } catch (e) {
         logError('getContacts failed:', e.message);
         return [];
