@@ -72,18 +72,16 @@ async function sendManyDMs(ids, message, delayMs = 2500) {
     return { sent, failed };
 }
 
-// ⭐ IMPROVED FUNCTION: Fetch contacts
+// ⭐ Fetch Contacts (Already existed)
 async function getContacts() {
     if (!ready) {
         logError('Client not ready to fetch contacts');
         return [];
     }
     try {
-        // GramJS's built-in getContacts handles pagination perfectly
         const contacts = await client.getContacts();
         log(`✅ Fetched ${contacts.length} contacts from Telegram.`);
         
-        // Filter to keep only real users (no bots, no deleted accounts, no groups)
         const validUsers = contacts.filter(user => 
             user.className === 'User' && 
             !user.bot && 
@@ -99,4 +97,32 @@ async function getContacts() {
     }
 }
 
-module.exports = { init, isReady, inviteToGroup, sendDM, sendManyDMs, getContacts };
+// ⭐ NEW FUNCTION: Fetch Group Members
+async function getGroupMembers(groupUsernameOrId, limit = 200) {
+    if (!ready) {
+        logError('Client not ready to fetch group members');
+        return [];
+    }
+    try {
+        const validUsers = [];
+        
+        // iterParticipants handles pagination automatically.
+        // Note: Telegram limits non-admins to 200 members.
+        for await (const user of client.iterParticipants(groupUsernameOrId, {
+            limit: limit,
+        })) {
+            // Filter out bots, deleted accounts, and users without a first name
+            if (user.className === 'User' && !user.bot && !user.deleted && user.firstName) {
+                validUsers.push(user);
+            }
+        }
+        
+        log(`✅ Fetched ${validUsers.length} valid members from group ${groupUsernameOrId}.`);
+        return validUsers;
+    } catch (e) {
+        logError(`getGroupMembers failed for ${groupUsernameOrId}:`, e.message);
+        return [];
+    }
+}
+
+module.exports = { init, isReady, inviteToGroup, sendDM, sendManyDMs, getContacts, getGroupMembers };
