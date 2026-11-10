@@ -115,6 +115,7 @@ function normalizePhone(phone) {
 
 // Admin conversation states (for AI text input flows)
 const adminStates = {};
+const aiBalancesPages = {}; // Store pagination data for AI balances
 
 // ============================================================
 // AI SETTINGS TABLE
@@ -202,7 +203,6 @@ async function getAIPlayers() {
 
 async function depositToAI(aiUserId, amount) {
     try {
-        // ⭐ Use ADMIN_DB_ID if available, otherwise send the Telegram ID. The backend now accepts both.
         const adminId = ADMIN_DB_ID || ADMIN_TELEGRAM_ID;
         await axios.post(`${API_URL}/api/admin/ai/balance`,
             { aiUserId, amount, adminId },
@@ -235,7 +235,7 @@ async function showAIMenu(chatId, messageId = null) {
             [{ text: settings.enabled ? '🔴 Disable AI' : '🟢 Enable AI', callback_data: 'ai_toggle' }],
             [{ text: '🃏 Set Cards per AI', callback_data: 'ai_set_cards' }],
             [{ text: '👥 Set Max AI per Room', callback_data: 'ai_set_max' }],
-            [{ text: '💰 AI Balances & Deposit', callback_data: 'ai_balances' }],
+            [{ text: '💰 AI Balances & Deposit', callback_data: 'ai_balances_0' }],
             [{ text: '🔙 Back to Admin Panel', callback_data: 'admin_panel' }]
         ]
     };
@@ -249,36 +249,48 @@ async function showAIMenu(chatId, messageId = null) {
     } catch (e) { console.error('showAIMenu:', e.message); }
 }
 
-// ---------- AI Balances Renderer ----------
-async function showAIBalances(chatId, messageId = null) {
-    // Try to get players
+// ---------- AI Balances Renderer (PAGINATED) ----------
+async function showAIBalances(chatId, page = 0, messageId = null) {
     let players = await getAIPlayers();
     
-    // If empty, wait 1 second and try one more time (fixes DB hiccups)
     if (!players || players.length === 0) {
         await new Promise(r => setTimeout(r, 1000));
         players = await getAIPlayers();
     }
 
-    // If it STILL fails, then truly show the error
     if (!players || players.length === 0) {
-        return bot.sendMessage(chatId, '❌ No AI players found in the database. Please check your connection.');
+        return bot.sendMessage(chatId, '❌ No AI players found in the database.');
     }
 
-    let text = `💰 <b>AI Player Balances</b>\n\n`;
+    // Store players in memory for pagination
+    aiBalancesPages[chatId] = players;
+    const totalPages = Math.ceil(players.length / 10);
+    
+    // Ensure page is within bounds
+    if (page < 0) page = 0;
+    if (page >= totalPages) page = totalPages - 1;
+
+    const startIdx = page * 10;
+    const endIdx = startIdx + 10;
+    const pagePlayers = players.slice(startIdx, endIdx);
+
+    let text = `💰 <b>AI Player Balances</b> (Page ${page + 1}/${totalPages})\n\n`;
     const keyboard = [];
 
-    // Show first 10 AI players
-    players.slice(0, 10).forEach((p, index) => {
-        text += `${index + 1}. <b>${escapeHtml(p.name)}</b> — ${formatCurrency(p.balance)}\n`;
-        const shortId = p.id.substring(0, 8);
+    pagePlayers.forEach((p, index) => {
+        const realIndex = startIdx + index + 1;
+        text += `${realIndex}. <b>${escapeHtml(p.name)}</b> — ${formatCurrency(p.balance)}\n`;
         keyboard.push([
             { text: `➕ 500 → ${p.name}`, callback_data: `ai_dep_${p.id}_500` },
             { text: `➕ 1000 → ${p.name}`, callback_data: `ai_dep_${p.id}_1000` }
         ]);
     });
 
-    text += `\n<i>Showing top 10 of ${players.length} AI players</i>`;
+    // Pagination buttons
+    const navButtons = [];
+    if (page > 0) navButtons.push({ text: '⬅️ Prev', callback_data: `ai_balances_${page - 1}` });
+    if (page < totalPages - 1) navButtons.push({ text: 'Next ➡️', callback_data: `ai_balances_${page + 1}` });
+    if (navButtons.length > 0) keyboard.push(navButtons);
 
     keyboard.push([{ text: '🔙 Back to AI Menu', callback_data: 'ai_menu' }]);
 
@@ -291,7 +303,6 @@ async function showAIBalances(chatId, messageId = null) {
             await bot.sendMessage(chatId, text, options);
         }
     } catch (e) {
-        // If message too long or edit fails, send fresh
         try { await bot.sendMessage(chatId, text, options); } catch (_) {}
     }
 }
@@ -1588,14 +1599,17 @@ bot.on('callback_query', async (call) => {
         await bot.sendMessage(chatId, '👥 <b>Max AI players per room?</b>\n\nSend a number between 1 and 20 (or /cancel):', { parse_mode: 'HTML' });
         return;
     }
-    if (data === 'ai_balances') {
+    
+    // ⭐ AI Balances pagination
+    if (data === 'ai_balances' || data.startsWith('ai_balances_')) {
         if (String(userId) !== String(ADMIN_TELEGRAM_ID)) return;
-        await showAIBalances(chatId, call.message.message_id);
+        const page = parseInt(data.split('_')[2] || '0');
+        await showAIBalances(chatId, page, call.message.message_id);
         return;
     }
+
     if (data.startsWith('ai_dep_')) {
         if (String(userId) !== String(ADMIN_TELEGRAM_ID)) return;
-        // Format: ai_dep_<uuid>_<amount>
         const parts = data.split('_');
         const aiUserId = parts[2];
         const amount = parseInt(parts[3]);
@@ -1609,7 +1623,9 @@ bot.on('callback_query', async (call) => {
         } else {
             await bot.answerCallbackQuery(call.id, { text: `❌ Failed` });
         }
-        await showAIBalances(chatId, call.message.message_id);
+        // Refresh the current page
+        const currentPage = parseInt(data.split('_')[4] || '0'); // Not really stored, just go to page 0 or calculate
+        await showAIBalances(chatId, 0, call.message.message_id);
         return;
     }
 
@@ -1820,10 +1836,21 @@ bot.on('callback_query', async (call) => {
                 const players = response.data;
                 const humans = players.filter(p => !p.is_ai);
                 const aiCount = players.length - humans.length;
-                let msg = '👥 <b>Players List</b>\n\n';
-                humans.slice(0, 20).forEach((p, i) => msg += `${i+1}. ${escapeHtml(p.first_name || 'Player')} — 💰 ${p.balance || 0} Birr\n`);
-                msg += `\n📊 Human players: ${humans.length}`;
+                
+                let msg = '👥 <b>Registered Players</b>\n\n';
+                // Show top 30 humans
+                humans.slice(0, 30).forEach((p, i) => {
+                    // ⭐ Add Green/Red circle based on status
+                    const statusIcon = p.status === 'ONLINE' ? '🟢' : '🔴';
+                    const username = p.username ? ` (@${p.username})` : '';
+                    msg += `${i+1}. ${statusIcon} <b>${escapeHtml(p.first_name || 'Player')}</b>${username}\n   💰 ${formatCurrency(p.balance)}\n`;
+                });
+                
+                if (humans.length > 30) msg += `\n<i>...and ${humans.length - 30} more players</i>`;
+                
+                msg += `\n\n📊 Human players: ${humans.length}`;
                 msg += `\n🤖 AI players: ${aiCount}`;
+                
                 await bot.sendMessage(chatId, msg, { parse_mode: 'HTML' });
             } catch (error) {
                 const errMsg = error.response?.data?.error || error.response?.data?.message || error.message;
