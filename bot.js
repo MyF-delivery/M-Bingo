@@ -202,6 +202,7 @@ async function getAIPlayers() {
 
 async function depositToAI(aiUserId, amount) {
     try {
+        // ⭐ Use ADMIN_DB_ID if available, otherwise send the Telegram ID. The backend now accepts both.
         const adminId = ADMIN_DB_ID || ADMIN_TELEGRAM_ID;
         await axios.post(`${API_URL}/api/admin/ai/balance`,
             { aiUserId, amount, adminId },
@@ -250,10 +251,18 @@ async function showAIMenu(chatId, messageId = null) {
 
 // ---------- AI Balances Renderer ----------
 async function showAIBalances(chatId, messageId = null) {
-    const players = await getAIPlayers();
+    // Try to get players
+    let players = await getAIPlayers();
+    
+    // If empty, wait 1 second and try one more time (fixes DB hiccups)
+    if (!players || players.length === 0) {
+        await new Promise(r => setTimeout(r, 1000));
+        players = await getAIPlayers();
+    }
 
-    if (!players.length) {
-        return bot.sendMessage(chatId, '❌ No AI players found. Run the SQL insert script first.');
+    // If it STILL fails, then truly show the error
+    if (!players || players.length === 0) {
+        return bot.sendMessage(chatId, '❌ No AI players found in the database. Please check your connection.');
     }
 
     let text = `💰 <b>AI Player Balances</b>\n\n`;
