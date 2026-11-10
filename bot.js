@@ -190,36 +190,63 @@ async function showAIBalances(chatId, page = 0, messageId = null) {
 }
 
 // ============================================================
-// ADMIN PLAYER LIST (PAGINATED)
+// ADMIN PLAYER LIST (PAGINATED) - UPDATED WITH ERROR HANDLING
 // ============================================================
 async function showAdminPlayers(chatId, page = 0, messageId = null) {
     try {
         const adminId = ADMIN_DB_ID || ADMIN_TELEGRAM_ID;
-        const response = await axios.get(`${API_URL}/api/admin/players?adminId=${adminId}`);
+        
+        // Add a timeout so the bot doesn't hang forever if Render is asleep
+        const response = await axios.get(`${API_URL}/api/admin/players?adminId=${adminId}`, { timeout: 10000 });
+        
         const players = response.data;
         const humans = players.filter(p => !p.is_ai);
         playerListPages[chatId] = humans;
         const totalPages = Math.ceil(humans.length / 20) || 1;
-        if (page < 0) page = 0; if (page >= totalPages) page = totalPages - 1;
-        const startIdx = page * 20; const pagePlayers = humans.slice(startIdx, startIdx + 20);
+        
+        if (page < 0) page = 0; 
+        if (page >= totalPages) page = totalPages - 1;
+        
+        const startIdx = page * 20; 
+        const pagePlayers = humans.slice(startIdx, startIdx + 20);
+        
         let msg = `👥 <b>Registered Players</b> (Page ${page + 1}/${totalPages})\n\n`;
         pagePlayers.forEach((p, i) => {
             const statusIcon = p.status === 'ONLINE' ? '🟢' : '🔴';
             const username = p.username ? ` (@${p.username})` : '';
-            msg += `${startIdx + i + 1}. ${statusIcon} <b>${escapeHtml(p.first_name || 'Player')}</b>${username}\n   💰 ${formatCurrency(p.balance)}\n`;
+            // Ensure first_name is not null
+            const safeName = p.first_name || p.name || 'Player';
+            msg += `${startIdx + i + 1}. ${statusIcon} <b>${escapeHtml(safeName)}</b>${username}\n   💰 ${formatCurrency(p.balance)}\n`;
         });
+        
         const keyboard = [];
         const navButtons = [];
         if (page > 0) navButtons.push({ text: '⬅️ Prev', callback_data: `admin_players_${page - 1}` });
         if (page < totalPages - 1) navButtons.push({ text: 'Next ➡️', callback_data: `admin_players_${page + 1}` });
         if (navButtons.length > 0) keyboard.push(navButtons);
         keyboard.push([{ text: '🔙 Back', callback_data: 'admin_panel' }]);
+        
         const options = { parse_mode: 'HTML', reply_markup: { inline_keyboard: keyboard } };
-        if (messageId) await bot.editMessageText(msg, { chat_id: chatId, message_id: messageId, ...options });
-        else await bot.sendMessage(chatId, msg, options);
-    } catch (e) { await bot.sendMessage(chatId, `⚠️ Error fetching players.`); }
+        
+        if (messageId) {
+            // Edit the existing message instead of sending a new one
+            await bot.editMessageText(msg, { chat_id: chatId, message_id: messageId, ...options }).catch(() => {});
+        } else {
+            await bot.sendMessage(chatId, msg, options);
+        }
+    } catch (e) {
+        console.error('showAdminPlayers Error:', e.message);
+        
+        // ⭐ If it fails, EDIT the message to show the error (prevents spam)
+        const errorMsg = `⚠️ <b>Error fetching players.</b>\n\n<i>${escapeHtml(e.message)}</i>\n\nPlease try again in a few seconds. (Render might be waking up)`;
+        
+        if (messageId) {
+            await bot.editMessageText(errorMsg, { chat_id: chatId, message_id: messageId, parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '🔄 Retry', callback_data: `admin_players_${page}` }, { text: '🔙 Back', callback_data: 'admin_panel' }]] } }).catch(() => {});
+        } else {
+            await bot.sendMessage(chatId, errorMsg, { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '🔄 Retry', callback_data: `admin_players_${page}` }]] } });
+        }
+    }
 }
-
 // ============================================================
 // OTHER AI HELPERS
 // ============================================================
