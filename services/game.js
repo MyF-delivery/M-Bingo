@@ -23,7 +23,6 @@ let broadcastToRoom = () => {};
  * Returns the room row.
  */
 async function findOrCreateRoom(client, userId, stake) {
-    // Look for a room in WAITING or SELECTING state with matching stake
     const existing = await client.query(
         `SELECT * FROM rooms
          WHERE stake = $1 AND state IN ('WAITING','SELECTING')
@@ -34,14 +33,19 @@ async function findOrCreateRoom(client, userId, stake) {
     );
     if (existing.rows.length) return existing.rows[0];
 
-    // Otherwise create a new room
     const created = await client.query(
         `INSERT INTO rooms (stake, state, status, countdown_seconds, game_number, called_numbers, prize_pool)
          VALUES ($1, 'SELECTING', 'SELECTING', $2, 0, '[]'::jsonb, 0)
          RETURNING *`,
         [stake, Number(process.env.BINGO_SELECTION_SECONDS || 60)]
     );
-    return created.rows[0];
+
+    // Schedule the selection timeout for the newly-created room.
+    // Previously this was omitted, so a newly-created room would
+    // only advance via the external auto-loop, never via its own timer.
+    const newRoom = created.rows[0];
+    scheduleSelectionTimeout(newRoom.id, Number(newRoom.countdown_seconds || 60));
+    return newRoom;
 }
 
 // ------------------------------------------------------------
@@ -57,7 +61,6 @@ function scheduleSelectionTimeout(roomId, seconds) {
             if (!room.rows.length) return;
             if (room.rows[0].state !== 'SELECTING') return;
 
-            // Count players with cards
             const players = await pool.query(
                 `SELECT user_id, cards FROM room_players WHERE room_id = $1 AND left_at IS NULL`,
                 [roomId]
@@ -67,7 +70,6 @@ function scheduleSelectionTimeout(roomId, seconds) {
             if (withCards.length >= 2) {
                 await startGame(roomId);
             } else {
-                // Not enough players – reset the room to WAITING and clear cards
                 await pool.query(
                     `UPDATE room_players SET cards = '[]'::jsonb WHERE room_id = $1`,
                     [roomId]
@@ -123,7 +125,6 @@ async function roomSnapshot(roomId) {
     );
     const row = result.rows[0];
     if (!row) return null;
-    // Normalise the players array to the shape the frontend expects
     row.players = (row.players || []).map(p => ({
         id: String(p.user_id),
         user_id: p.user_id,
@@ -152,7 +153,6 @@ async function getGameCards(roomId, calledNumbers = []) {
             if (!cardRes.rows.length) continue;
             const board = cardRes.rows[0].board;
 
-            // Build marked matrix
             const marked = Array(5).fill().map(() => Array(5).fill(false));
             for (let r = 0; r < 5; r++) {
                 for (let c = 0; c < 5; c++) {
@@ -200,7 +200,6 @@ async function startGame(roomId) {
             throw new Error('Need at least 2 players with cards');
         }
 
-        // Deduct stake * cards from each player
         let totalPool = 0;
         for (const p of players) {
             const payAmount = Number(room.stake) * p.cards.length;
@@ -231,14 +230,12 @@ async function startGame(roomId) {
         const commission = Number((totalPool * 0.2).toFixed(2));
         const winnerPool = Number((totalPool * 0.8).toFixed(2));
 
-        // Save commission record
         await client.query(
             `INSERT INTO commissions (room_id, total_stake, commission_amount)
              VALUES ($1, $2, $3)`,
             [roomId, totalPool, commission]
         );
 
-        // Update room
         await client.query(
             `UPDATE rooms
              SET prize_pool = $1,
@@ -252,6 +249,9 @@ async function startGame(roomId) {
         );
 
         await client.query('COMMIT');
+
+        // Clear any pending selection timeout — we're now playing.
+        clearSelectionTimer(roomId);
 
         // Kick off the number caller (async, not awaited)
         startNumberCaller(roomId);
@@ -337,11 +337,16 @@ async function endGame(roomId, winners) {
 // ------------------------------------------------------------
 // NUMBER CALLER + BINGO DETECTION
 // ------------------------------------------------------------
+// ============================================================
+// FIX (Bug G1): the caller now reads called_numbers from the DB
+// on every tick instead of a local array. This makes restart /
+// resumeActiveGames safe and prevents duplicate-number bugs
+// after a Render cold start.
+// ============================================================
 
 function startNumberCaller(roomId) {
     stopNumberCaller(roomId);
     const intervalMs = Number(process.env.BINGO_CALL_INTERVAL_MS || 10000);
-    const calledNumbers = [];
 
     const tick = async () => {
         try {
@@ -353,14 +358,11 @@ function startNumberCaller(roomId) {
             const room = roomRes.rows[0];
             if (room.state !== 'PLAYING') return stopNumberCaller(roomId);
 
-            // Generate a new unique number 1-75
-            let num;
-            do {
-                num = Math.floor(Math.random() * 75) + 1;
-            } while (calledNumbers.includes(num) && calledNumbers.length < 75);
+            const calledNumbers = Array.isArray(room.called_numbers)
+                ? room.called_numbers.map(Number)
+                : [];
 
             if (calledNumbers.length >= 75) {
-                // All numbers called – end with no winner
                 stopNumberCaller(roomId);
                 broadcastToRoom(roomId, 'gameEnd', {
                     winners: [],
@@ -368,8 +370,19 @@ function startNumberCaller(roomId) {
                     calledNumbers
                 });
                 await endGame(roomId, []);
+                // Reset after 10s celebration — mirrors the winner branch.
+                setTimeout(() => resetRoomAfterGame(roomId), 10000);
                 return;
             }
+
+            // Generate a new unique number
+            let num;
+            let attempts = 0;
+            do {
+                num = Math.floor(Math.random() * 75) + 1;
+                attempts++;
+                if (attempts > 500) break; // safety
+            } while (calledNumbers.includes(num));
 
             calledNumbers.push(num);
 
@@ -386,12 +399,10 @@ function startNumberCaller(roomId) {
                 cards
             });
 
-            // Check for winners
             const winners = detectWinners(cards);
             if (winners.length > 0) {
                 stopNumberCaller(roomId);
 
-                // Augment with playerId & names
                 const enriched = [];
                 for (const w of winners) {
                     const u = await pool.query(
@@ -422,44 +433,10 @@ function startNumberCaller(roomId) {
                     calledNumbers
                 });
 
-                // Reset room after 10 seconds for next round
-                setTimeout(async () => {
-                    try {
-                        await pool.query(
-                            `UPDATE room_players SET cards = '[]'::jsonb WHERE room_id = $1`,
-                            [roomId]
-                        );
-                        await pool.query(
-                            `UPDATE rooms
-                             SET state = 'SELECTING',
-                                 status = 'SELECTING',
-                                 called_numbers = '[]'::jsonb,
-                                 prize_pool = 0,
-                                 created_at = CURRENT_TIMESTAMP
-                             WHERE id = $1`,
-                            [roomId]
-                        );
-                        const snap = await roomSnapshot(roomId);
-                        if (snap) {
-                            broadcastToRoom(roomId, 'gameStateUpdate', {
-                                status: 'selecting',
-                                roomId,
-                                stake: Number(snap.stake),
-                                gameNumber: snap.game_number,
-                                selectedCards: [],
-                                selectionTimeLeft: Number(snap.countdown_seconds || 60),
-                                players: snap.players
-                            });
-                            scheduleSelectionTimeout(roomId, Number(snap.countdown_seconds || 60));
-                        }
-                    } catch (e) {
-                        console.error('Room reset error:', e);
-                    }
-                }, 10000);
+                setTimeout(() => resetRoomAfterGame(roomId), 10000);
                 return;
             }
 
-            // Schedule the next tick
             const t = setTimeout(tick, intervalMs);
             roomTimers.set(roomId, t);
         } catch (e) {
@@ -468,9 +445,48 @@ function startNumberCaller(roomId) {
         }
     };
 
-    // First call after intervalMs
     const t = setTimeout(tick, intervalMs);
     roomTimers.set(roomId, t);
+}
+
+// ============================================================
+// FIX (Bug G2): the reset branch now consistently re-schedules
+// the selection timeout, matching what startGame does. The
+// inlined reset code was previously duplicated in two places.
+// ============================================================
+async function resetRoomAfterGame(roomId) {
+    try {
+        await pool.query(
+            `UPDATE room_players SET cards = '[]'::jsonb WHERE room_id = $1`,
+            [roomId]
+        );
+        await pool.query(
+            `UPDATE rooms
+             SET state = 'SELECTING',
+                 status = 'SELECTING',
+                 called_numbers = '[]'::jsonb,
+                 prize_pool = 0,
+                 game_number = COALESCE(game_number, 0),
+                 created_at = CURRENT_TIMESTAMP
+             WHERE id = $1`,
+            [roomId]
+        );
+        const snap = await roomSnapshot(roomId);
+        if (snap) {
+            broadcastToRoom(roomId, 'gameStateUpdate', {
+                status: 'selecting',
+                roomId,
+                stake: Number(snap.stake),
+                gameNumber: snap.game_number,
+                selectedCards: [],
+                selectionTimeLeft: Number(snap.countdown_seconds || 60),
+                players: snap.players
+            });
+            scheduleSelectionTimeout(roomId, Number(snap.countdown_seconds || 60));
+        }
+    } catch (e) {
+        console.error('Room reset error:', e);
+    }
 }
 
 function stopNumberCaller(roomId) {
@@ -489,17 +505,14 @@ function detectWinners(cards) {
         const m = card.marked;
         const b = card.board;
 
-        // Rows
         for (let r = 0; r < 5; r++) {
             if (m[r].every(Boolean)) patterns.push({ type: 'row', index: r, label: `Row ${r + 1}` });
         }
-        // Columns
         for (let c = 0; c < 5; c++) {
             let full = true;
             for (let r = 0; r < 5; r++) if (!m[r][c]) { full = false; break; }
             if (full) patterns.push({ type: 'column', index: c, label: `Column ${c + 1}` });
         }
-        // Diagonals
         let diag1 = true, diag2 = true;
         for (let i = 0; i < 5; i++) {
             if (!m[i][i]) diag1 = false;
@@ -507,11 +520,9 @@ function detectWinners(cards) {
         }
         if (diag1) patterns.push({ type: 'diagonal', index: 0, label: 'Diagonal ↘' });
         if (diag2) patterns.push({ type: 'diagonal', index: 1, label: 'Diagonal ↙' });
-        // Corners
         if (m[0][0] && m[0][4] && m[4][0] && m[4][4]) {
             patterns.push({ type: 'corner', index: 0, label: 'Corners' });
         }
-        // Full house
         let fullHouse = true;
         for (let r = 0; r < 5; r++) for (let c = 0; c < 5; c++) if (!m[r][c]) fullHouse = false;
         if (fullHouse) patterns.push({ type: 'full', index: 0, label: 'Full House' });
@@ -535,23 +546,18 @@ function detectWinners(cards) {
 // ------------------------------------------------------------
 
 module.exports = {
-    // room management
     findOrCreateRoom,
     roomSnapshot,
     getGameCards,
-    // selection
     scheduleSelectionTimeout,
     clearSelectionTimer,
-    // game lifecycle
     startGame,
     endGame,
-    // number caller
     startNumberCaller,
     stopNumberCaller,
-    // timers (exposed so app.js can clean up on SIGTERM)
+    resetRoomAfterGame,
     roomTimers,
     selectionTimers,
-    // helper to set the broadcast function from app.js
     set broadcastToRoom(fn) { broadcastToRoom = fn; },
     get broadcastToRoom() { return broadcastToRoom; }
 };
