@@ -41,9 +41,38 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
+// ============================================================
+// FIX (Bug D): Ensure admin_settings table exists at boot.
+// Previously only bot.js created it — on a fresh DB the very
+// first getAISettings()/isWithdrawalsPaused() call crashed.
+// ============================================================
+(async () => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS admin_settings (
+        key VARCHAR(64) PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await pool.query(`
+      INSERT INTO admin_settings (key, value) VALUES
+        ('withdrawals_paused', 'false'),
+        ('pause_threshold', '1000'),
+        ('ai_players_enabled', 'false'),
+        ('ai_cards_per_game', '2'),
+        ('max_ai_players_per_room', '5')
+      ON CONFLICT (key) DO NOTHING
+    `);
+    console.log('✅ admin_settings ready (app.js)');
+  } catch (e) {
+    console.error('❌ admin_settings init failed:', e.message);
+  }
+})();
+
 // ---------- Health Checks ----------
 app.get('/', (req, res) =>
-  res.json({ ok: true, service: 'm-bingo', status: 'online', websocket: true, health: '/health', version: '3.4.0' })
+  res.json({ ok: true, service: 'm-bingo', status: 'online', websocket: true, health: '/health', version: '3.4.1' })
 );
 app.get('/ready', async (req, res) => {
   try { await pool.query('SELECT 1'); res.json({ ok: true }); }
@@ -68,27 +97,54 @@ async function isAdmin(userId) {
   const user = await findUser(userId);
   return !!(user && user.is_admin === true);
 }
+
+// ============================================================
+// FIX (Bug A): requireAdmin MUST return a real DB row whose
+// `id` is a UUID. If the request used only the Telegram ID
+// (e.g. bot started before DB had the admin row), we create
+// or promote the admin row and attach the real UUID.
+// ============================================================
 async function requireAdmin(req, res, next) {
   try {
     const adminId = req.headers['x-admin-id'] || req.body?.adminId || req.query?.adminId;
-    
-    // ⭐ FIX: Allow request if it matches the Admin UUID OR the Admin Telegram ID
-    const isAdminUser = await isAdmin(adminId);
-    const isAdminTelegram = String(adminId) === String(config.ADMIN_TELEGRAM_ID);
-    
-    if (!isAdminUser && !isAdminTelegram) {
-        return res.status(403).json({ error: 'Unauthorized' });
+    if (!adminId) return res.status(403).json({ error: 'Unauthorized' });
+
+    const adminUser = await findUser(adminId);
+
+    // Case 1: no row found, and caller used the configured Telegram ID.
+    // Auto-create/promote so first-click actions always succeed.
+    if (!adminUser && String(adminId) === String(config.ADMIN_TELEGRAM_ID)) {
+      const inserted = await pool.query(
+        `INSERT INTO users (telegram_id, username, first_name, balance, is_admin, last_login)
+         VALUES ($1, 'admin', 'Admin', 0, TRUE, CURRENT_TIMESTAMP)
+         ON CONFLICT (telegram_id) DO UPDATE SET is_admin = TRUE
+         RETURNING *`,
+        [config.ADMIN_TELEGRAM_ID]
+      );
+      req.admin = inserted.rows[0];
+      return next();
     }
-    
-    req.admin = await findUser(adminId);
-    // If req.admin is null (because it was just the telegram ID and DB glitched), fallback to the telegram ID
-    if (!req.admin) req.admin = { id: config.ADMIN_TELEGRAM_ID };
-    
+
+    if (!adminUser) return res.status(403).json({ error: 'Unauthorized' });
+
+    // Case 2: row exists but is_admin is false → promote it.
+    if (adminUser.is_admin !== true) {
+      if (String(adminUser.telegram_id) !== String(config.ADMIN_TELEGRAM_ID)) {
+        return res.status(403).json({ error: 'Unauthorized' });
+      }
+      await pool.query(`UPDATE users SET is_admin = TRUE WHERE id = $1`, [adminUser.id]);
+      adminUser.is_admin = true;
+    }
+
+    // `adminUser.id` is guaranteed to be a real UUID here.
+    req.admin = adminUser;
     next();
-  } catch (e) { 
-    res.status(500).json({ error: 'Authorization error' }); 
+  } catch (e) {
+    console.error('requireAdmin:', e.message);
+    res.status(500).json({ error: 'Authorization error' });
   }
 }
+
 function verifyTelegramWebAppInitData(initData) {
   if (!initData) return { valid: false, reason: 'missing initData' };
   const botToken = config.BOT_TOKEN;
@@ -109,24 +165,36 @@ function verifyTelegramWebAppInitData(initData) {
     const dataCheckString = pairs.join('\n');
     const secretKey = crypto.createHmac('sha256', 'WebAppData').update(botToken).digest();
     const calculated = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
-    return { valid: crypto.timingSafeEqual(Buffer.from(calculated), Buffer.from(hash)), reason: 'ok' };
+
+    // ============================================================
+    // FIX (Bug L): timingSafeEqual throws on length mismatch.
+    // Guard with explicit length check before comparison.
+    // ============================================================
+    const a = Buffer.from(calculated, 'hex');
+    const b = Buffer.from(hash, 'hex');
+    const valid = a.length === b.length && crypto.timingSafeEqual(a, b);
+    return { valid, reason: 'ok' };
   } catch (e) { return { valid: false, reason: 'invalid initData' }; }
 }
+
 function validStake(stake) {
-  return 10; 
+  return 10;
 }
 function safeNumber(n) {
   const x = Number(n);
   return Number.isFinite(x) ? x : 0;
 }
 
-// ---------- Authoritative remaining selection seconds ----------
+// ============================================================
+// FIX (Bug H): clamp selection timer to [0, totalSec] so clock
+// skew or a stale created_at can never freeze a room forever.
+// ============================================================
 function computeSelectionTimeLeft(snapshot) {
   if (!snapshot || snapshot.state !== 'SELECTING') return 0;
   const totalSec = Number(snapshot.countdown_seconds || config.BINGO_SELECTION_SECONDS || 60);
   const startedAt = new Date(snapshot.created_at).getTime();
   const elapsedSec = Math.max(0, (Date.now() - startedAt) / 1000);
-  return Math.max(0, Math.ceil(totalSec - elapsedSec));
+  return Math.max(0, Math.min(totalSec, Math.ceil(totalSec - elapsedSec)));
 }
 
 // ---------- WITHDRAWALS PAUSED CHECK ----------
@@ -138,7 +206,16 @@ async function isWithdrawalsPaused() {
 }
 
 // ---------- AI SETTINGS & LOGIC ----------
+// ============================================================
+// FIX (Bug E): cache AI settings for 5s. Previously the 1s
+// auto-loop fired a DB query every tick, which could saturate
+// Postgres connections under load.
+// ============================================================
+let _aiSettingsCache = null;
+let _aiSettingsCachedAt = 0;
 async function getAISettings() {
+  const now = Date.now();
+  if (_aiSettingsCache && now - _aiSettingsCachedAt < 5000) return _aiSettingsCache;
   try {
     const result = await pool.query(
       `SELECT key, value FROM admin_settings WHERE key IN ('ai_players_enabled', 'ai_cards_per_game', 'max_ai_players_per_room')`
@@ -149,10 +226,12 @@ async function getAISettings() {
       if (row.key === 'ai_cards_per_game') settings.cards = Number(row.value);
       if (row.key === 'max_ai_players_per_room') settings.maxPerRoom = Number(row.value);
     });
+    _aiSettingsCache = settings;
+    _aiSettingsCachedAt = now;
     return settings;
   } catch (e) {
-    console.error('Error fetching AI settings:', e);
-    return { enabled: false, cards: 2, maxPerRoom: 5 };
+    console.error('Error fetching AI settings:', e.message);
+    return _aiSettingsCache || { enabled: false, cards: 2, maxPerRoom: 5 };
   }
 }
 
@@ -562,7 +641,7 @@ function startNumberCaller(roomId) {
         stopNumberCaller(roomId);
         broadcastToRoom(roomId, 'gameEnd', { winners: [], prizePerWinner: 0, calledNumbers: already });
         await endGame(roomId, []);
-        setTimeout(() => resetRoomAfterGame(roomId), 10000); // ⭐ 10s Celebration
+        setTimeout(() => resetRoomAfterGame(roomId), 10000);
         return;
       }
 
@@ -595,7 +674,7 @@ function startNumberCaller(roomId) {
         const prizePerWinner = enriched.length ? Number((prizePool / enriched.length).toFixed(2)) : 0;
         await endGame(roomId, enriched.map(w => ({ user_id: w.playerId })));
         broadcastToRoom(roomId, 'gameEnd', { winners: enriched, prizePerWinner, calledNumbers: already });
-        setTimeout(() => resetRoomAfterGame(roomId), 10000); // ⭐ 10s Celebration
+        setTimeout(() => resetRoomAfterGame(roomId), 10000);
         return;
       }
 
@@ -826,7 +905,7 @@ app.get('/api/users/:userId', async (req, res) => {
         id: user.id, telegramId: user.telegram_id, username: user.username,
         firstName: user.first_name, lastName: user.last_name, balance: Number(user.balance),
         gamesPlayed: Number(user.total_games_played || 0), wins: Number(user.total_wins || 0),
-        phoneNumber: user.phone_number, // ⭐ Added so the bot knows if they have a phone number
+        phoneNumber: user.phone_number,
         createdAt: user.created_at
       }
     });
@@ -837,7 +916,7 @@ app.get('/api/users/:userId', async (req, res) => {
 app.get('/api/users/by-phone/:phone', async (req, res) => {
   try {
     const rawPhone = req.params.phone.replace(/[^0-9]/g, '');
-    const last9 = rawPhone.slice(-9); // Get the last 9 digits
+    const last9 = rawPhone.slice(-9);
     
     const result = await pool.query(
       `SELECT * FROM users WHERE RIGHT(REGEXP_REPLACE(phone_number, '[^0-9]', '', 'g'), 9) = $1 LIMIT 1`,
@@ -896,7 +975,6 @@ app.post('/api/transfer', async (req, res) => {
   const { fromId, toId, amount } = req.body;
   
   try {
-    // ⭐ Look up the actual users to get their UUIDs
     const sender = await findUser(fromId);
     const recipient = await findUser(toId);
 
@@ -905,7 +983,6 @@ app.post('/api/transfer', async (req, res) => {
 
     const transferAmount = Number(amount);
     
-    // ⭐ Enforce 500 Birr Max
     if (transferAmount > 500) {
       return res.status(400).json({ success: false, message: 'Maximum transfer amount is 500 Birr' });
     }
@@ -913,7 +990,6 @@ app.post('/api/transfer', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid transfer amount' });
     }
 
-    // ⭐ Pass the Database UUIDs instead of Telegram IDs
     await wallet.transferBalance(sender.id, recipient.id, transferAmount);
     res.json({ success: true, message: 'Transfer successful' });
     
@@ -1313,12 +1389,18 @@ app.get('/api/admin/ai/settings', requireAdmin, async (req, res) => {
   res.json(settings);
 });
 
+// ============================================================
+// FIX (Bug E): clear the AI settings cache on write so the
+// cache invalidation is deterministic.
+// ============================================================
 app.post('/api/admin/ai/settings', requireAdmin, async (req, res) => {
   const { enabled, cards, maxPerRoom } = req.body;
   try {
     if (enabled !== undefined) await pool.query(`UPDATE admin_settings SET value = $1 WHERE key = 'ai_players_enabled'`, [String(enabled)]);
     if (cards !== undefined) await pool.query(`UPDATE admin_settings SET value = $1 WHERE key = 'ai_cards_per_game'`, [String(cards)]);
     if (maxPerRoom !== undefined) await pool.query(`UPDATE admin_settings SET value = $1 WHERE key = 'max_ai_players_per_room'`, [String(maxPerRoom)]);
+    _aiSettingsCache = null;
+    _aiSettingsCachedAt = 0;
     res.json({ success: true, message: 'AI settings updated' });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -1332,12 +1414,24 @@ app.get('/api/admin/ai/players', requireAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ============================================================
+// FIX (Bug B): resolve aiUserId -> real UUID before calling
+// wallet.adminAdjustBalance. Also verify the target is an AI
+// user. This eliminates the "No AI agent found" symptom where
+// the first click failed and the second succeeded.
+// ============================================================
 app.post('/api/admin/ai/balance', requireAdmin, async (req, res) => {
   const { aiUserId, amount } = req.body;
   try {
-    await wallet.adminAdjustBalance(req.admin.id, aiUserId, safeNumber(amount), 'AI_DEPOSIT');
+    const target = await findUser(aiUserId);
+    if (!target) return res.status(404).json({ error: 'AI agent not found' });
+    if (target.is_ai !== true) return res.status(400).json({ error: 'Target is not an AI player' });
+    await wallet.adminAdjustBalance(req.admin.id, target.id, safeNumber(amount), 'AI_DEPOSIT');
     res.json({ success: true, message: 'AI balance adjusted' });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) {
+    console.error('AI balance error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ---------- WebSocket ----------
@@ -1417,6 +1511,11 @@ function logAutoLoop(roomId, msg) {
   console.log(`[auto-loop] room=${roomId} ${msg}`);
 }
 
+// ============================================================
+// FIX (Bug F): the previous loop did an N+1 roomSnapshot() for
+// every selecting room every second. We now fetch all selecting
+// rooms (with players) in one query and reuse the result.
+// ============================================================
 setInterval(async () => {
   try {
     const aiSettings = await getAISettings();
@@ -1443,53 +1542,74 @@ setInterval(async () => {
       }
 
       const selectingRooms = await pool.query(
-        `SELECT id FROM rooms WHERE state = 'SELECTING' AND stake = 10`
+        `SELECT r.id, r.state, r.countdown_seconds, r.created_at, r.min_players, r.stake,
+                r.game_number, r.called_numbers, r.prize_pool,
+                COALESCE(jsonb_agg(jsonb_build_object(
+                  'user_id', rp.user_id, 'cards', rp.cards,
+                  'is_winner', rp.is_winner, 'is_ai', u.is_ai,
+                  'first_name', u.first_name, 'last_name', u.last_name
+                )) FILTER (WHERE rp.user_id IS NOT NULL), '[]'::jsonb) AS players
+         FROM rooms r
+         LEFT JOIN room_players rp ON rp.room_id = r.id AND rp.left_at IS NULL
+         LEFT JOIN users u ON u.id = rp.user_id
+         WHERE r.state = 'SELECTING' AND r.stake = 10
+         GROUP BY r.id`
       );
-      for (const r of selectingRooms.rows) {
-        const snap = await roomSnapshot(r.id);
-        if (!snap || snap.state !== 'SELECTING') continue;
-
+      for (const snap of selectingRooms.rows) {
         const currentAICount = (snap.players || []).filter(p => p.is_ai === true).length;
         const neededAICount = Math.max(0, aiSettings.maxPerRoom - currentAICount);
 
         if (neededAICount > 0) {
-          const added = await addAIPlayersToRoom(r.id, neededAICount);
+          const added = await addAIPlayersToRoom(snap.id, neededAICount);
           if (added > 0) {
-            logAutoLoop(r.id, `pre-filled ${added} AI player(s)`);
+            logAutoLoop(snap.id, `pre-filled ${added} AI player(s)`);
           }
         }
       }
     }
 
-    const rooms = await pool.query(`SELECT id FROM rooms WHERE state = 'SELECTING'`);
-    for (const r of rooms.rows) {
-      const snap = await roomSnapshot(r.id);
-      if (!snap || snap.state !== 'SELECTING') continue;
+    // One-shot query to fetch every selecting room WITH players
+    const rooms = await pool.query(`
+      SELECT r.id, r.state, r.countdown_seconds, r.created_at, r.min_players, r.stake,
+             r.game_number, r.called_numbers, r.prize_pool,
+             COALESCE(jsonb_agg(jsonb_build_object(
+               'user_id', rp.user_id, 'cards', rp.cards,
+               'is_winner', rp.is_winner, 'is_ai', u.is_ai,
+               'first_name', u.first_name, 'last_name', u.last_name
+             )) FILTER (WHERE rp.user_id IS NOT NULL), '[]'::jsonb) AS players
+      FROM rooms r
+      LEFT JOIN room_players rp ON rp.room_id = r.id AND rp.left_at IS NULL
+      LEFT JOIN users u ON u.id = rp.user_id
+      WHERE r.state = 'SELECTING'
+      GROUP BY r.id
+    `);
+
+    for (const snap of rooms.rows) {
       const remaining = computeSelectionTimeLeft(snap);
       if (remaining > 0) continue;
 
       const readyCount = (snap.players || []).filter(p => Array.isArray(p.cards) && p.cards.length).length;
       const minPlayers = Number(snap.min_players || 2);
 
-      logAutoLoop(r.id, `timer=0 readyCount=${readyCount} min=${minPlayers} stake=${snap.stake} game#=${snap.game_number}`);
+      logAutoLoop(snap.id, `timer=0 readyCount=${readyCount} min=${minPlayers} stake=${snap.stake} game#=${snap.game_number}`);
 
       if (readyCount >= minPlayers) {
         try {
-          const result = await startGameAndBroadcast(r.id);
+          const result = await startGameAndBroadcast(snap.id);
           if (result) {
-            console.log(`✅ [auto-loop] room=${r.id} game STARTED — prizePool=${result.prizePool} players=${result.players.length} removed=${result.removed.length}`);
-            autoLoopLogAt.delete(r.id);
+            console.log(`✅ [auto-loop] room=${snap.id} game STARTED — prizePool=${result.prizePool} players=${result.players.length} removed=${result.removed.length}`);
+            autoLoopLogAt.delete(snap.id);
           }
         } catch (e) {
-          console.error(`❌ [auto-loop] room=${r.id} startGame error:`, e.message);
+          console.error(`❌ [auto-loop] room=${snap.id} startGame error:`, e.message);
         }
       } else {
-        logAutoLoop(r.id, `not enough cards → reset created_at (${readyCount}/${minPlayers})`);
-        await pool.query(`UPDATE rooms SET created_at = NOW() WHERE id = $1`, [r.id]);
-        const fresh = await roomSnapshot(r.id);
+        logAutoLoop(snap.id, `not enough cards → reset created_at (${readyCount}/${minPlayers})`);
+        await pool.query(`UPDATE rooms SET created_at = NOW() WHERE id = $1`, [snap.id]);
+        const fresh = await roomSnapshot(snap.id);
         if (fresh) {
-          broadcastToRoom(r.id, 'gameStateUpdate', {
-            status: 'selecting', roomId: r.id, stake: Number(fresh.stake),
+          broadcastToRoom(snap.id, 'gameStateUpdate', {
+            status: 'selecting', roomId: snap.id, stake: Number(fresh.stake),
             gameNumber: fresh.game_number,
             selectedCards: fresh.players.flatMap(p => p.cards || []),
             playerSelections: buildPlayerSelections(fresh),
