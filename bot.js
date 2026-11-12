@@ -118,6 +118,35 @@ const adminStates = {};
 const aiBalancesPages = {};
 const playerListPages = {};
 
+// ------------------------------------------------------------
+// FIX #1: Track users currently mid-flow so stale `once('text')`
+// listeners don't swallow subsequent commands (e.g. /play).
+// ------------------------------------------------------------
+const pendingFlows = new Set();
+
+/**
+ * Safe replacement for bot.once('text', ...).
+ * - Ignores any message that starts with '/' (commands).
+ * - Ignores messages from other chats.
+ * - Auto-expires after 5 minutes to prevent listener leaks.
+ */
+function onceText(chatId, userId, handler) {
+    const listener = async (msg) => {
+        if (msg.chat.id !== chatId) return;
+        if (msg.text && msg.text.startsWith('/')) return; // let command handlers run
+        bot.removeListener('text', listener);
+        pendingFlows.delete(userId);
+        try { await handler(msg); }
+        catch (e) { console.error('onceText handler error:', e.message); }
+    };
+    bot.on('text', listener);
+    pendingFlows.add(userId);
+    setTimeout(() => {
+        bot.removeListener('text', listener);
+        pendingFlows.delete(userId);
+    }, 5 * 60 * 1000);
+}
+
 // ============================================================
 // AI SETTINGS TABLE
 // ============================================================
@@ -202,16 +231,22 @@ async function getAIPlayers() {
     }
 }
 
+// ------------------------------------------------------------
+// FIX #2: depositToAI — log ADMIN_DB_ID state, use timeout,
+// and treat missing `success` field as success (some APIs omit it).
+// ------------------------------------------------------------
 async function depositToAI(aiUserId, amount) {
     try {
         const adminId = ADMIN_DB_ID || ADMIN_TELEGRAM_ID;
-        await axios.post(`${API_URL}/api/admin/ai/balance`,
+        if (!ADMIN_DB_ID) console.warn('⚠️ depositToAI: ADMIN_DB_ID is null — using Telegram ID fallback');
+        const res = await axios.post(`${API_URL}/api/admin/ai/balance`,
             { aiUserId, amount, adminId },
-            { headers: { 'x-admin-id': adminId } }
+            { headers: { 'x-admin-id': adminId }, timeout: 15000 }
         );
-        return true;
+        // Treat missing `success` as success; only fail if explicitly false
+        return res.data?.success !== false;
     } catch (e) {
-        console.error('depositToAI:', e.message);
+        console.error('depositToAI:', e.response?.data || e.message);
         return false;
     }
 }
@@ -741,7 +776,9 @@ async function ensureAdminUser() {
         console.error('❌ Failed to ensure admin user:', error.message);
     }
 }
-ensureAdminUser();
+// NOTE: We no longer fire-and-forget ensureAdminUser() here.
+// It is now awaited inside the startup IIFE below so ADMIN_DB_ID
+// is populated before any callback can run. (FIX #2)
 
 // ============================================================
 // EXPRESS SERVER
@@ -781,25 +818,31 @@ bot.deleteWebHook().catch(() => console.log('Webhook deleted (or not set).'));
 // ============================================================
 // PLAYER HELPERS
 // ============================================================
+// ------------------------------------------------------------
+// FIX #3: getOrCreateUser — retry once + log API error body.
+// ------------------------------------------------------------
 async function getOrCreateUser(telegramId, firstName, lastName, username, referralCode, phoneNumber) {
-    try {
-        const response = await axios.post(`${API_URL}/api/users/register`, {
-            telegramId,
-            username: username || `user_${telegramId}`,
-            firstName,
-            lastName: lastName || '',
-            referralCode: referralCode || null,
-            phone: phoneNumber // ⭐ Pass the normalized phone number
-        }, { headers: { 'X-Bot-Token': BOT_TOKEN } });
-        return response.data.user;
-    } catch (error) {
-        console.error('Registration error:', error.message);
-        return null;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+            const response = await axios.post(`${API_URL}/api/users/register`, {
+                telegramId,
+                username: username || `user_${telegramId}`,
+                firstName,
+                lastName: lastName || '',
+                referralCode: referralCode || null,
+                phone: phoneNumber
+            }, { headers: { 'X-Bot-Token': BOT_TOKEN }, timeout: 15000 });
+            return response.data.user;
+        } catch (error) {
+            console.error(`Registration attempt ${attempt} failed:`, error.response?.data || error.message);
+            if (attempt === 2) return null;
+            await new Promise(r => setTimeout(r, 1500));
+        }
     }
 }
 async function getUserBalance(telegramId) {
     try {
-        const response = await axios.get(`${API_URL}/api/wallet/${telegramId}`);
+        const response = await axios.get(`${API_URL}/api/wallet/${telegramId}`, { timeout: 15000 });
         return response.data.balance || 0;
     } catch { return 0; }
 }
@@ -830,7 +873,7 @@ async function handleStart(msg, match) {
     const referralId = match ? parseInt(match[1]) : null;
 
     try {
-        const response = await axios.get(`${API_URL}/api/users/${userId}`);
+        const response = await axios.get(`${API_URL}/api/users/${userId}`, { timeout: 15000 });
         if (response.data.user) {
             // ⭐ Check if they are missing a phone number
             if (!response.data.user.phoneNumber) {
@@ -875,11 +918,25 @@ To complete your registration, please share your contact by clicking the button 
     bot._referralMap[userId] = referralId;
 }
 
+// ------------------------------------------------------------
+// FIX #3: handlePlay — only block on a real 404, not on
+// transient Render cold-start errors.
+// ------------------------------------------------------------
 async function handlePlay(msg) {
     const chatId = msg.chat.id;
     const userId = msg.from.id;
-    try { await axios.get(`${API_URL}/api/users/${userId}`); }
-    catch (e) { await bot.sendMessage(chatId, '❌ Please register first using /start.'); return; }
+    try {
+        const res = await axios.get(`${API_URL}/api/users/${userId}`, { timeout: 15000 });
+        if (!res.data?.user) throw { response: { status: 404 } };
+    } catch (e) {
+        // Only block if the backend truly says "not found".
+        // Timeouts / 5xx / network errors → let the user try the game.
+        if (e.response?.status === 404) {
+            await bot.sendMessage(chatId, '❌ Please register first using /start.');
+            return;
+        }
+        console.warn('handlePlay transient error:', e.message || e);
+    }
     const gameUrl = `${GAME_URL}?mode=lobby&userId=${userId}`;
     await bot.sendMessage(chatId, '🎮 <b>Join a game room below:</b>\n\nClick to open the game.', {
         parse_mode: 'HTML',
@@ -897,8 +954,10 @@ async function handleBalance(msg) {
 }
 async function handleDeposit(msg) {
     const chatId = msg.chat.id;
+    const userId = msg.from.id;
     await bot.sendMessage(chatId, '🏦 <b>Make a Deposit</b>\n\nPlease enter the amount you wish to deposit (minimum 50 ETB).', { parse_mode: 'HTML' });
-    bot.once('text', async (msg2) => {
+    // FIX #1: use onceText instead of bot.once('text')
+    onceText(chatId, userId, async (msg2) => {
         const amount = parseInt(msg2.text);
         if (isNaN(amount) || amount < 50 || amount > 5000) {
             await bot.sendMessage(chatId, '❌ Invalid amount. Please enter a number between 50 and 5000.');
@@ -921,7 +980,8 @@ async function handleWithdraw(msg) {
     const chatId = msg.chat.id;
     const userId = msg.from.id;
     await bot.sendMessage(chatId, '📤 <b>Withdrawal</b>\n\nPlease enter the amount you wish to withdraw.', { parse_mode: 'HTML' });
-    bot.once('text', async (msg2) => {
+    // FIX #1: use onceText
+    onceText(chatId, userId, async (msg2) => {
         const amount = parseInt(msg2.text);
         if (isNaN(amount) || amount <= 0) { await bot.sendMessage(chatId, '❌ Invalid amount.'); return; }
         const balance = await getUserBalance(userId);
@@ -930,13 +990,14 @@ async function handleWithdraw(msg) {
             return;
         }
         await bot.sendMessage(chatId, '🏦 <b>Please enter your withdrawal address</b> (Bank Account or Phone Number):', { parse_mode: 'HTML' });
-        bot.once('text', async (msg3) => {
+        // FIX #1: use onceText for the second step too
+        onceText(chatId, userId, async (msg3) => {
             const address = msg3.text.trim();
             if (!address) return;
             try {
                 const response = await axios.post(`${API_URL}/api/withdraw/request`, {
                     userId, amount, method: 'cbe_bank', account: address
-                });
+                }, { timeout: 15000 });
                 if (response.data.success) {
                     await bot.sendMessage(chatId, '⏳ <b>Processing your withdrawal request...</b>\n\nPlease wait for admin approval.', { parse_mode: 'HTML' });
                 } else {
@@ -954,7 +1015,8 @@ async function handleTransfer(msg) {
     
     await bot.sendMessage(chatId, '🔄 <b>Transfer Funds</b>\n\nPlease enter the recipient\'s <b>Phone Number</b> (e.g. 0912345678) OR their <b>Telegram ID</b>.', { parse_mode: 'HTML' });
     
-    bot.once('text', async (msg2) => {
+    // FIX #1: use onceText
+    onceText(chatId, userId, async (msg2) => {
         const input = msg2.text.trim();
         let recipientId;
         let recipientName;
@@ -964,7 +1026,7 @@ async function handleTransfer(msg) {
             const phone = normalizePhone(input);
             
             try {
-                const response = await axios.get(`${API_URL}/api/users/by-phone/${phone}`);
+                const response = await axios.get(`${API_URL}/api/users/by-phone/${phone}`, { timeout: 15000 });
                 recipientId = response.data.user.id;
                 recipientName = response.data.user.first_name;
             } catch (error) {
@@ -980,7 +1042,7 @@ async function handleTransfer(msg) {
         } else {
             // Otherwise, assume it's a Telegram ID
             try {
-                const response = await axios.get(`${API_URL}/api/users/${input}`);
+                const response = await axios.get(`${API_URL}/api/users/${input}`, { timeout: 15000 });
                 recipientId = response.data.user.id;
                 recipientName = response.data.user.firstName;
             } catch (error) {
@@ -992,7 +1054,8 @@ async function handleTransfer(msg) {
         // If registered, ask for amount
         await bot.sendMessage(chatId, `👤 Recipient: <b>${recipientName}</b>\n\n💵 <b>Enter amount to transfer (Max 500 Birr):</b>`, { parse_mode: 'HTML' });
         
-        bot.once('text', async (msg3) => {
+        // FIX #1: use onceText for the amount step
+        onceText(chatId, userId, async (msg3) => {
             const amount = parseInt(msg3.text);
             
             if (isNaN(amount) || amount <= 0) { 
@@ -1013,7 +1076,7 @@ async function handleTransfer(msg) {
             }
             
             try {
-                await axios.post(`${API_URL}/api/transfer`, { fromId: userId, toId: recipientId, amount });
+                await axios.post(`${API_URL}/api/transfer`, { fromId: userId, toId: recipientId, amount }, { timeout: 15000 });
                 await bot.sendMessage(chatId, `✅ Successfully transferred <b>${formatCurrency(amount)}</b> to ${recipientName}.`, { parse_mode: 'HTML' });
             } catch (e) {
                 const errMsg = e.response?.data?.message || 'Transfer failed.';
@@ -1042,7 +1105,7 @@ async function handleHistory(msg) {
     const chatId = msg.chat.id;
     const userId = msg.from.id;
     try {
-        const response = await axios.get(`${API_URL}/api/transactions/${userId}`);
+        const response = await axios.get(`${API_URL}/api/transactions/${userId}`, { timeout: 15000 });
         const txs = response.data.transactions || [];
         if (!txs.length) { await bot.sendMessage(chatId, '📜 No transactions found.'); return; }
         let msgText = '📜 <b>Your Transaction History</b>\n\n';
@@ -1060,7 +1123,7 @@ async function handleProfile(msg) {
     const chatId = msg.chat.id;
     const userId = msg.from.id;
     try {
-        const response = await axios.get(`${API_URL}/api/users/${userId}`);
+        const response = await axios.get(`${API_URL}/api/users/${userId}`, { timeout: 15000 });
         const user = response.data.user;
         const isAdmin = userId.toString() === ADMIN_TELEGRAM_ID;
         const adminBadge = isAdmin ? ' 👑 (Admin)' : '';
@@ -1493,6 +1556,9 @@ bot.on('text', async (msg) => {
     if (String(userId) !== String(ADMIN_TELEGRAM_ID)) return;
     if (!adminStates[chatId]) return;
 
+    // FIX #1: Don't steal messages from an active onceText flow
+    if (pendingFlows.has(userId)) return;
+
     // Ignore commands (let other handlers process them)
     if (text.startsWith('/')) {
         // Allow /cancel to reset
@@ -1578,33 +1644,39 @@ bot.on('contact', async (msg) => {
         // ⭐ Check if they are already registered
         let isAlreadyRegistered = false;
         try {
-            const res = await axios.get(`${API_URL}/api/users/${userId}`);
+            const res = await axios.get(`${API_URL}/api/users/${userId}`, { timeout: 15000 });
             if (res.data.user) isAlreadyRegistered = true;
         } catch (e) {}
 
         // ⭐ This will UPDATE their phone number if they are already registered
         const user = await getOrCreateUser(userId, firstName, lastName, username, referralId, formattedPhone);
-        
-        if (user) {
-            if (isAlreadyRegistered) {
-                // They just updated their phone number
-                await bot.sendMessage(chatId, '✅ <b>Phone number updated successfully!</b>\n\nYou can now use transfers and withdrawals.', { parse_mode: 'HTML', reply_markup: { remove_keyboard: true } });
-                await bot.sendMessage(chatId, '🎯 <b>Welcome back!</b>', { parse_mode: 'HTML', ...mainMenu(userId) });
-            } else {
-                // New user registration
-                if (referralId) {
-                    try {
-                        await axios.post(`${API_URL}/api/referral/process`, { referrerId: referralId, newUserId: userId });
-                        await bot.sendMessage(referralId, `🎉 You earned ${REFERRAL_BONUS} Birr bonus! Someone registered using your referral link.`);
-                    } catch {}
-                }
-                const welcome = `✅ <b>Registration Successful!</b>\n\n🎯 Welcome to M-BINGO, ${firstName}!\n💰 You have received a <b>50 Birr</b> starting balance.\n\n👇 <b>Select an option below to start playing!</b>`;
-                await bot.sendMessage(chatId, '✅ Registration complete!', { reply_markup: { remove_keyboard: true } });
-                await bot.sendMessage(chatId, welcome, { parse_mode: 'HTML', ...mainMenu(userId) });
-                await bot.sendMessage(ADMIN_TELEGRAM_ID,
-                    `🆕 <b>New User Registered!</b>\n\n👤 Name: ${firstName}\n🆔 ID: ${userId}\n📱 Username: @${username}\n📞 Phone: ${formattedPhone}`,
-                    { parse_mode: 'HTML' });
+
+        // FIX #3: explicit failure message if registration actually failed
+        if (!user) {
+            await bot.sendMessage(chatId,
+                '⚠️ <b>Registration failed</b> — the server may still be waking up.\n\nPlease tap the “📱 Share Contact” button again in ~10 seconds.',
+                { parse_mode: 'HTML' });
+            return;
+        }
+
+        if (isAlreadyRegistered) {
+            // They just updated their phone number
+            await bot.sendMessage(chatId, '✅ <b>Phone number updated successfully!</b>\n\nYou can now use transfers and withdrawals.', { parse_mode: 'HTML', reply_markup: { remove_keyboard: true } });
+            await bot.sendMessage(chatId, '🎯 <b>Welcome back!</b>', { parse_mode: 'HTML', ...mainMenu(userId) });
+        } else {
+            // New user registration
+            if (referralId) {
+                try {
+                    await axios.post(`${API_URL}/api/referral/process`, { referrerId: referralId, newUserId: userId }, { timeout: 15000 });
+                    await bot.sendMessage(referralId, `🎉 You earned ${REFERRAL_BONUS} Birr bonus! Someone registered using your referral link.`);
+                } catch {}
             }
+            const welcome = `✅ <b>Registration Successful!</b>\n\n🎯 Welcome to M-BINGO, ${firstName}!\n💰 You have received a <b>50 Birr</b> starting balance.\n\n👇 <b>Select an option below to start playing!</b>`;
+            await bot.sendMessage(chatId, '✅ Registration complete!', { reply_markup: { remove_keyboard: true } });
+            await bot.sendMessage(chatId, welcome, { parse_mode: 'HTML', ...mainMenu(userId) });
+            await bot.sendMessage(ADMIN_TELEGRAM_ID,
+                `🆕 <b>New User Registered!</b>\n\n👤 Name: ${firstName}\n🆔 ID: ${userId}\n📱 Username: @${username}\n📞 Phone: ${formattedPhone}`,
+                { parse_mode: 'HTML' });
         }
     } catch { await bot.sendMessage(chatId, '❌ Registration failed. Please try again later.'); }
 });
@@ -1621,7 +1693,7 @@ bot.on('callback_query', async (call) => {
     if (data === 'broadcast_confirm') {
         if (String(userId) !== String(ADMIN_TELEGRAM_ID)) return;
         try { await executeBroadcast(chatId); }
-        catch (e) { delete broadcastDrafts[String(chatId)]; delete adminStates[chatId]; await bot.sendMessage(chatId, `❌ Broadcast failed: ${escapeHtml(e.message)}`); }
+        catch (e) { broadcastDrafts.delete(String(chatId)); delete adminStates[chatId]; await bot.sendMessage(chatId, `❌ Broadcast failed: ${escapeHtml(e.message)}`); }
         return;
     }
     if (data === 'broadcast_cancel') {
@@ -1670,6 +1742,11 @@ bot.on('callback_query', async (call) => {
 
     if (data.startsWith('ai_dep_')) {
         if (String(userId) !== String(ADMIN_TELEGRAM_ID)) return;
+        // FIX #2: if ADMIN_DB_ID isn't ready yet, give it a moment
+        if (!ADMIN_DB_ID) {
+            await bot.answerCallbackQuery(call.id, { text: '⏳ Admin not ready, retrying…' });
+            await new Promise(r => setTimeout(r, 1500));
+        }
         const parts = data.split('_');
         const aiUserId = parts[2];
         const amount = parseInt(parts[3]);
@@ -1728,7 +1805,7 @@ bot.on('callback_query', async (call) => {
         const depositId = data.split('_')[2];
         try {
             const adminId = ADMIN_DB_ID || ADMIN_TELEGRAM_ID;
-            await axios.post(`${API_URL}/api/admin/deposits/approve`, { depositId, adminId });
+            await axios.post(`${API_URL}/api/admin/deposits/approve`, { depositId, adminId }, { timeout: 15000 });
             await bot.sendMessage(chatId, `✅ Deposit ${depositId} approved.`);
         } catch (e) {
             await bot.sendMessage(chatId, `❌ Error approving deposit: ${e.response?.data?.error || e.message}`);
@@ -1740,7 +1817,7 @@ bot.on('callback_query', async (call) => {
         const depositId = data.split('_')[2];
         try {
             const adminId = ADMIN_DB_ID || ADMIN_TELEGRAM_ID;
-            await axios.post(`${API_URL}/api/admin/deposits/reject`, { depositId, adminId, reason: 'Rejected by admin' });
+            await axios.post(`${API_URL}/api/admin/deposits/reject`, { depositId, adminId, reason: 'Rejected by admin' }, { timeout: 15000 });
             await bot.sendMessage(chatId, `❌ Deposit ${depositId} rejected.`);
         } catch (e) {
             await bot.sendMessage(chatId, `❌ Error rejecting deposit: ${e.response?.data?.error || e.message}`);
@@ -1752,7 +1829,7 @@ bot.on('callback_query', async (call) => {
         const withdrawalId = data.split('_')[2];
         try {
             const adminId = ADMIN_DB_ID || ADMIN_TELEGRAM_ID;
-            await axios.post(`${API_URL}/api/admin/withdrawals/approve`, { withdrawalId, adminId });
+            await axios.post(`${API_URL}/api/admin/withdrawals/approve`, { withdrawalId, adminId }, { timeout: 15000 });
             await bot.sendMessage(chatId, `✅ Withdrawal ${withdrawalId} approved.`);
         } catch (e) {
             await bot.sendMessage(chatId, `❌ Error approving withdrawal: ${e.response?.data?.error || e.message}`);
@@ -1764,7 +1841,7 @@ bot.on('callback_query', async (call) => {
         const withdrawalId = data.split('_')[2];
         try {
             const adminId = ADMIN_DB_ID || ADMIN_TELEGRAM_ID;
-            await axios.post(`${API_URL}/api/admin/withdrawals/reject`, { withdrawalId, adminId, reason: 'Rejected by admin' });
+            await axios.post(`${API_URL}/api/admin/withdrawals/reject`, { withdrawalId, adminId, reason: 'Rejected by admin' }, { timeout: 15000 });
             await bot.sendMessage(chatId, `❌ Withdrawal ${withdrawalId} rejected.`);
         } catch (e) {
             await bot.sendMessage(chatId, `❌ Error rejecting withdrawal: ${e.response?.data?.error || e.message}`);
@@ -1849,7 +1926,7 @@ bot.on('callback_query', async (call) => {
             if (userId.toString() !== ADMIN_TELEGRAM_ID) break;
             try {
                 const adminId = ADMIN_DB_ID || ADMIN_TELEGRAM_ID;
-                const response = await axios.get(`${API_URL}/api/admin/deposits?adminId=${adminId}`);
+                const response = await axios.get(`${API_URL}/api/admin/deposits?adminId=${adminId}`, { timeout: 15000 });
                 const deposits = response.data;
                 if (!deposits || !deposits.length) { await bot.sendMessage(chatId, '📭 No pending deposits.'); break; }
                 for (const d of deposits) {
@@ -1872,7 +1949,7 @@ bot.on('callback_query', async (call) => {
             if (userId.toString() !== ADMIN_TELEGRAM_ID) break;
             try {
                 const adminId = ADMIN_DB_ID || ADMIN_TELEGRAM_ID;
-                const response = await axios.get(`${API_URL}/api/admin/withdrawals?adminId=${adminId}`);
+                const response = await axios.get(`${API_URL}/api/admin/withdrawals?adminId=${adminId}`, { timeout: 15000 });
                 const withdrawals = response.data;
                 if (!withdrawals || !withdrawals.length) { await bot.sendMessage(chatId, '📭 No pending withdrawals.'); break; }
                 for (const w of withdrawals) {
@@ -1895,7 +1972,7 @@ bot.on('callback_query', async (call) => {
             if (userId.toString() !== ADMIN_TELEGRAM_ID) break;
             try {
                 const adminId = ADMIN_DB_ID || ADMIN_TELEGRAM_ID;
-                const response = await axios.get(`${API_URL}/api/admin/stats?adminId=${adminId}`);
+                const response = await axios.get(`${API_URL}/api/admin/stats?adminId=${adminId}`, { timeout: 15000 });
                 const s = response.data;
                 await bot.sendMessage(chatId,
                     `📊 <b>Server Stats</b>\n\n👥 Online: ${s.onlinePlayers || 0}\n🎮 Active Games: ${s.activeGames || 0}\n💰 Revenue Today: ${s.todayRevenue || 0} Birr\n📈 Total Users: ${s.totalPlayers || 0}\n🤖 AI Players: ${s.totalAIPlayers || 0}`,
@@ -1932,7 +2009,7 @@ bot.onText(/\/addbalance (\d+) (\d+)/, async (msg, match) => {
     const amount   = parseInt(match[2]);
     try {
         const adminId = ADMIN_DB_ID || ADMIN_TELEGRAM_ID;
-        await axios.post(`${API_URL}/api/admin/balance/add`, { userId: targetId, amount, adminId });
+        await axios.post(`${API_URL}/api/admin/balance/add`, { userId: targetId, amount, adminId }, { timeout: 15000 });
         await bot.sendMessage(chatId, `✅ Added ${amount} Birr to player!`);
     } catch { await bot.sendMessage(chatId, '⚠️ Error adding balance.'); }
 });
@@ -2021,6 +2098,8 @@ function startCronJobs() {
 // STARTUP
 // ============================================================
 (async () => {
+    // FIX #2: await admin user BEFORE any callbacks can fire
+    await ensureAdminUser();
     await initSettingsTable();
     await keepAlive();
     await inviter.init();
