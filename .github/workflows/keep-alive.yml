@@ -2,9 +2,7 @@ name: Keep Render Services Awake
 
 on:
   schedule:
-    # Runs every 10 minutes
     - cron: '*/10 * * * *'
-  # Allows you to manually run it from the Actions tab for testing
   workflow_dispatch:
 
 jobs:
@@ -14,12 +12,21 @@ jobs:
     steps:
       - name: Ping Backend API (Wake up server)
         run: |
-          curl -s -o /dev/null -w "%{http_code}" https://m-bingo-backend.onrender.com/health || true
-      
+          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 \
+            -H "User-Agent: m-bingo-keepalive/1.0" \
+            https://m-bingo-backend.onrender.com/health || echo "000")
+          echo "Backend responded: $code"
+
       - name: Ping Bot Service (Wake up bot)
         run: |
-          curl -s -o /dev/null -w "%{http_code}" https://m-bingo-bot.onrender.com/ || true
-          
+          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 \
+            -H "User-Agent: m-bingo-keepalive/1.0" \
+            https://m-bingo-bot.onrender.com/ || echo "000")
+          echo "Bot responded: $code"
+
       - name: Ping Frontend (Keep CDN warm)
         run: |
-          curl -s -o /dev/null -w "%{http_code}" https://myf-delivery.github.io/M-Bingo/ || true
+          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 \
+            -H "User-Agent: m-bingo-keepalive/1.0" \
+            https://myf-delivery.github.io/M-Bingo/ || echo "000")
+          echo "Frontend responded: $code"
