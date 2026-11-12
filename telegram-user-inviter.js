@@ -11,12 +11,20 @@ const API_ID = Number(process.env.TELEGRAM_API_ID || 0);
 const API_HASH = String(process.env.TELEGRAM_API_HASH || '').trim();
 const SESSION = String(process.env.TELEGRAM_SESSION || '').trim();
 
+// ============================================================
+// FIX (Bug S): enforce a minimum inter-message delay and back
+// off on PEER_FLOOD so the account is not banned.
+// ============================================================
+const MIN_SEND_DELAY_MS = Math.max(30_000, Number(process.env.INVITER_MIN_DELAY_MS || 30_000));
+const PEER_FLOOD_BACKOFF_MS = 60_000;
+
 let client = null;
 let ready = false;
 let lastError = 'Not initialized';
 
 function log(...args) { console.log('[INVITER]', ...args); }
 function logError(...args) { console.error('[INVITER][ERROR]', ...args); }
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 async function init() {
     if (ready && client) return true;
@@ -36,7 +44,6 @@ async function init() {
 
         await client.connect();
 
-        // connect() alone does not prove that the session is logged in.
         const me = await client.getMe();
         if (!me || me.deleted) {
             throw new Error('Telegram session is not authorized. Create and set a valid user session.');
@@ -89,14 +96,31 @@ async function sendDM(userId, message) {
     }
 }
 
-async function sendManyDMs(ids, message, delayMs = 2500) {
+// ============================================================
+// FIX (Bug S): sendManyDMs now enforces a minimum 30 s gap and
+// backs off 60 s on PEER_FLOOD. Safe for arbitrary batch sizes.
+// ============================================================
+async function sendManyDMs(ids, message, delayMs = MIN_SEND_DELAY_MS) {
     let sent = 0;
     let failed = 0;
+    const gap = Math.max(MIN_SEND_DELAY_MS, delayMs);
+
     for (const id of ids) {
-        const ok = await sendDM(id, message);
-        if (ok) sent++;
-        else failed++;
-        await new Promise(resolve => setTimeout(resolve, Math.max(1000, delayMs)));
+        if (!isReady()) { failed++; continue; }
+        try {
+            await client.sendMessage(id, { message });
+            sent++;
+        } catch (error) {
+            failed++;
+            const errText = error?.errorMessage || error?.message || '';
+            if (String(errText).includes('PEER_FLOOD') || String(errText).includes('FLOOD')) {
+                logError(`PEER_FLOOD on ${id}, backing off ${PEER_FLOOD_BACKOFF_MS} ms`);
+                await sleep(PEER_FLOOD_BACKOFF_MS);
+            } else {
+                logError(`DM failed for ${id}:`, errText);
+            }
+        }
+        await sleep(gap);
     }
     return { sent, failed };
 }
