@@ -1679,7 +1679,7 @@ wss.on('connection', (ws) => {
           break;
         }
 
-        case 'startSelection': {
+  case 'startSelection': {
           const user = await findUser(data.userId || ws.userId);
           const stake = validStake(data.stake);
           if (!user) return sendError(ws, 'Please register/login first');
@@ -1690,6 +1690,18 @@ wss.on('connection', (ws) => {
           try {
             await client.query('BEGIN');
 
+            // ⭐ NEW RULE: Check if ANY game is currently PLAYING
+            const activeGame = await client.query(
+              `SELECT id FROM rooms WHERE state = 'PLAYING' LIMIT 1`
+            );
+
+            if (activeGame.rows.length > 0) {
+              await client.query('ROLLBACK');
+              // Tell the user to wait
+              return sendError(ws, '⏳ A game is currently in progress. Please wait for it to finish before joining the next one.');
+            }
+
+            // The rest of your existing code remains the same:
             const playingRoom = await client.query(
               `SELECT * FROM rooms WHERE stake = $1 AND state = 'PLAYING' ORDER BY created_at DESC LIMIT 1`, [stake]
             );
@@ -1780,64 +1792,8 @@ wss.on('connection', (ws) => {
           } finally { client.release(); }
           break;
         }
-
-        case 'selectCard': {
-          if (!ws.userId) return sendError(ws, 'Not authenticated');
-          if (!ws.roomId) return sendError(ws, 'Start game selection first');
-          const cardNumber = Number(data.cardNumber);
-          if (!Number.isInteger(cardNumber) || cardNumber < 1 || cardNumber > 200)
-            return sendError(ws, 'Invalid card number');
-
-          const client = await pool.connect();
-          try {
-            await client.query('BEGIN');
-            const roomResult = await client.query(`SELECT * FROM rooms WHERE id = $1 FOR UPDATE`, [ws.roomId]);
-            if (!roomResult.rows.length) throw new Error('Room not found');
-            const room = roomResult.rows[0];
-            if (room.state !== 'SELECTING') throw new Error('Card selection is closed');
-            const cardResult = await client.query(
-              `SELECT card_number FROM bingo_cards WHERE card_number = $1 AND is_active = TRUE`, [cardNumber]
-            );
-            if (!cardResult.rows.length) throw new Error('Card not found');
-
-            const used = await client.query(
-              `SELECT user_id, cards FROM room_players WHERE room_id = $1 AND left_at IS NULL FOR UPDATE`, [ws.roomId]
-            );
-            for (const p of used.rows) {
-              const cards = Array.isArray(p.cards) ? p.cards.map(Number) : [];
-              if (cards.includes(cardNumber)) throw new Error('This card is already selected');
-            }
-            const me = used.rows.find((p) => String(p.user_id) === String(ws.userId));
-            if (!me) throw new Error('You are not in this room');
-            const myCards = Array.isArray(me.cards) ? me.cards.map(Number) : [];
-            if (myCards.includes(cardNumber)) throw new Error('You already selected this card');
-            myCards.push(cardNumber);
-
-            await client.query(
-              `UPDATE room_players SET cards = $1::jsonb WHERE room_id = $2 AND user_id = $3`,
-              [JSON.stringify(myCards), ws.roomId, ws.userId]
-            );
-            await client.query('COMMIT');
-            send(ws, 'cardSelectionResult', { success: true, cardNumber, cards: myCards });
-            const snapshot = await roomSnapshot(ws.roomId);
-            if (snapshot) {
-              broadcastToRoom(ws.roomId, 'gameStateUpdate', {
-                status: 'selecting', roomId: ws.roomId, stake: Number(snapshot.stake),
-                gameNumber: snapshot.game_number,
-                selectedCards: snapshot.players.flatMap(p => p.cards || []),
-                playerSelections: buildPlayerSelections(snapshot),
-                selectionTimeLeft: computeSelectionTimeLeft(snapshot),
-                players: snapshot.players,
-              });
-            }
-          } catch (e) {
-            await client.query('ROLLBACK').catch(() => {});
-            send(ws, 'cardSelectionResult', { success: false, message: e.message });
-          } finally { client.release(); }
-          break;
-        }
-
-        case 'deselectCard': {
+           
+      case 'deselectCard': {
           if (!ws.userId || !ws.roomId) return sendError(ws, 'Not authenticated or no room');
           const cardNumber = Number(data.cardNumber);
           if (!Number.isInteger(cardNumber) || cardNumber < 1 || cardNumber > 200)
