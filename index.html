@@ -989,6 +989,7 @@
         let currentTab = 'game';
         let lockCardsEmpty = false;
         let userJoinedRoom = false;
+        let isJoining = false;
 
         function findCurrentPlayer() {
             if (!playerId) return null;
@@ -1199,6 +1200,9 @@
 
          function createRoom(stake) {
             if (!playerId) { showToast('Please register first', false); return; }
+            if (isJoining) return; // ⭐ ADD THIS LINE
+            
+            isJoining = true; // ⭐ ADD THIS LINE
             lockCardsEmpty = false;
             userJoinedRoom = true;
             stopSelectionDisplayTimer();
@@ -1208,6 +1212,9 @@
             
             // Send the request but DON'T switch screens yet
             sendToServer('startSelection', { stake: stake, userId: playerId });
+            
+            // ⭐ ADD THIS LINE to unlock after 3 seconds
+            setTimeout(() => { isJoining = false; }, 3000);
             
             // Wait for the server to respond. If successful, the 'init' or 'gameStateUpdate' 
             // event will automatically switch us to the selection screen.
