@@ -1197,7 +1197,7 @@
         }
         function refreshLobby() { updateLobbyData(); }
 
-        function createRoom(stake) {
+         function createRoom(stake) {
             if (!playerId) { showToast('Please register first', false); return; }
             lockCardsEmpty = false;
             userJoinedRoom = true;
@@ -1205,11 +1205,12 @@
             stopResetPoll();
             showResetWaiting(false);
             lastStartAttemptAt = 0;
+            
+            // Send the request but DON'T switch screens yet
             sendToServer('startSelection', { stake: stake, userId: playerId });
-            gameState.stake = stake;
-            document.getElementById('selStake').textContent = stake + ' ብር';
-            showGameSelection();
-            switchTab('game');
+            
+            // Wait for the server to respond. If successful, the 'init' or 'gameStateUpdate' 
+            // event will automatically switch us to the selection screen.
         }
 
         // ============================================================
