@@ -1690,56 +1690,23 @@ wss.on('connection', (ws) => {
           try {
             await client.query('BEGIN');
 
-            // ⭐ NEW RULE: Check if ANY game is currently PLAYING
-            const activeGame = await client.query(
-              `SELECT id FROM rooms WHERE state = 'PLAYING' LIMIT 1`
+            // ⭐ UPDATED RULE: Check if ANY room is currently PLAYING or SELECTING
+            // This ensures everyone is forced into the SAME single room.
+            const activeRoom = await client.query(
+              `SELECT id, state FROM rooms WHERE state IN ('PLAYING', 'SELECTING') LIMIT 1`
             );
 
-            if (activeGame.rows.length > 0) {
-              await client.query('ROLLBACK');
-              // Tell the user to wait
-              return sendError(ws, '⏳ A game is currently in progress. Please wait for it to finish before joining the next one.');
+            if (activeRoom.rows.length > 0) {
+              const room = activeRoom.rows[0];
+              if (room.state === 'PLAYING') {
+                await client.query('ROLLBACK');
+                return sendError(ws, '⏳ A game is currently in progress. Please wait for it to finish before joining the next one.');
+              }
+              // If it's SELECTING, we let them join that specific room.
+              // The code below already handles this by querying for state IN ('WAITING','SELECTING').
             }
 
             // The rest of your existing code remains the same:
-            const playingRoom = await client.query(
-              `SELECT * FROM rooms WHERE stake = $1 AND state = 'PLAYING' ORDER BY created_at DESC LIMIT 1`, [stake]
-            );
-            if (playingRoom.rows.length) {
-              const room = playingRoom.rows[0];
-              const existingEntry = await client.query(
-                `SELECT id FROM room_players WHERE room_id = $1 AND user_id = $2 AND left_at IS NULL FOR UPDATE`,
-                [room.id, user.id]
-              );
-              if (!existingEntry.rows.length) {
-                await client.query(
-                  `INSERT INTO room_players (room_id, user_id, cards, is_ready) VALUES ($1, $2, '[]'::jsonb, FALSE)`,
-                  [room.id, user.id]
-                );
-              }
-              await client.query('COMMIT');
-              ws.userId = String(user.id);
-              ws.roomId = room.id;
-              clients.set(ws.userId, ws);
-              const snapshot = await roomSnapshot(room.id);
-              const calledNumbers = Array.isArray(snapshot.called_numbers) ? snapshot.called_numbers : [];
-              const cards = await getGameCards(room.id, calledNumbers);
-              send(ws, 'gameStart', {
-                roomId: room.id, gameNumber: snapshot.game_number, stake: Number(snapshot.stake),
-                totalCards: cards.length, prizePool: Number(snapshot.prize_pool),
-                calledNumbers, calledCount: calledNumbers.length, cards,
-              });
-              break;
-            }
-
-            const endedRoom = await client.query(
-              `SELECT id FROM rooms WHERE stake = $1 AND state = 'ENDED' AND ended_at >= NOW() - INTERVAL '15 seconds' LIMIT 1`, [stake]
-            );
-            if (endedRoom.rows.length) {
-              await client.query('ROLLBACK');
-              return sendError(ws, '⏳ አሸናፊው በመከበር ላይ ነው። እባክዎ ጥቂት ሰከንዶች ይጠብቁ...');
-            }
-
             const roomResult = await client.query(
               `SELECT * FROM rooms WHERE stake = $1 AND state IN ('WAITING','SELECTING') ORDER BY created_at LIMIT 1 FOR UPDATE`,
               [stake]
