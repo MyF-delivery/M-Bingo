@@ -1631,7 +1631,7 @@ wss.on('connection', (ws) => {
       const data = message.data || {};
 
       switch (type) {
-        case 'auth': {
+          case 'auth': {
           const user = await findUser(data.userId);
           if (!user) return sendError(ws, 'User authentication failed');
           if (user.is_banned === true) return sendError(ws, 'You are banned from playing.');
@@ -1673,6 +1673,10 @@ wss.on('connection', (ws) => {
               calledNumbers, calledCount: calledNumbers.length, cards,
             });
           }
+          
+          // ⭐ THIS MUST BE ON ONE SINGLE LINE
+          await broadcastLobbyData(); 
+          
           break;
         }
 
