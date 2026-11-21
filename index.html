@@ -1959,51 +1959,56 @@
             const container = document.getElementById('lobby-rooms-container');
             container.innerHTML = '';
             
-            // ⭐ FIX: Only show the FIRST room found to prevent duplicates
-            const roomData = Array.isArray(data) && data.length > 0 ? data[0] : null;
-            if (!roomData) {
-                container.innerHTML = '<div style="text-align:center;color:#888;padding:20px;">No active rooms</div>';
+            // If data is empty or not an array, show a message
+            if (!Array.isArray(data) || data.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align:center;padding:40px 20px;color:#888;">
+                        <div style="font-size:48px;margin-bottom:10px;">⏳</div>
+                        <div style="font-weight:700;font-size:16px;">No active games right now</div>
+                        <div style="font-size:13px;margin-top:5px;">Waiting for the server to start a new room...</div>
+                    </div>
+                `;
                 return;
             }
 
-            const rooms = [{ stake: roomData.stake || 10 }];
+            // Only show the first room to prevent duplicates
+            const serverData = data[0]; 
+            const stake = serverData.stake || 10;
+            const noCards = serverData.selectedCardsCount || 0;
+            const winAmount = Math.round(noCards * stake * 0.8);
+            const status = serverData.status || 'waiting';
+            const timeLeft = serverData.selectionTimeLeft || 0;
             
-            rooms.forEach(room => {
-                const serverData = data.find(r => r.stake === room.stake) || {};
-                const noCards = serverData.selectedCardsCount || 0;
-                const winAmount = Math.round(noCards * room.stake * 0.8);
-                const status = serverData.status || 'waiting';
-                const timeLeft = serverData.selectionTimeLeft || 0;
-                let statusDisplay = '';
-                let statusClass = '';
-                if (noCards === 0 && status !== 'playing') {
-                    statusDisplay = '⏳ Wait';
-                    statusClass = 'status-wait status-blink';
-                } else if (status === 'playing') {
-                    statusDisplay = '🔴 Playing';
-                    statusClass = 'status-playing status-blink';
-                } else if (status === 'selecting' && timeLeft > 0) {
-                    statusDisplay = `⏳ ${timeLeft}s`;
-                    statusClass = 'status-selecting';
-                } else {
-                    statusDisplay = '⏳ Wait';
-                    statusClass = 'status-wait status-blink';
-                }
-                const roomCard = document.createElement('div');
-                roomCard.className = 'room-card';
-                roomCard.innerHTML = `
-                    <div class="room-top">
-                        <div class="room-stake">${room.stake} ETB</div>
-                        <button class="room-join-btn" onclick="createRoom(${room.stake})">JOIN</button>
-                    </div>
-                    <div class="room-info">
-                        <div class="room-item"><span>👥 ${noCards} ካርዶች ተመርጠዋል</span></div>
-                        <div class="room-item"><span>💰 ${winAmount} ETB</span></div>
-                        <div class="room-item"><span class="${statusClass}">${statusDisplay}</span></div>
-                    </div>
-                `;
-                container.appendChild(roomCard);
-            });
+            let statusDisplay = '';
+            let statusClass = '';
+            if (noCards === 0 && status !== 'playing') {
+                statusDisplay = '⏳ Wait';
+                statusClass = 'status-wait status-blink';
+            } else if (status === 'playing') {
+                statusDisplay = '🔴 Playing';
+                statusClass = 'status-playing status-blink';
+            } else if (status === 'selecting' && timeLeft > 0) {
+                statusDisplay = `⏳ ${timeLeft}s`;
+                statusClass = 'status-selecting';
+            } else {
+                statusDisplay = '⏳ Wait';
+                statusClass = 'status-wait status-blink';
+            }
+
+            const roomCard = document.createElement('div');
+            roomCard.className = 'room-card';
+            roomCard.innerHTML = `
+                <div class="room-top">
+                    <div class="room-stake">${stake} ETB</div>
+                    <button class="room-join-btn" onclick="createRoom(${stake})">JOIN</button>
+                </div>
+                <div class="room-info">
+                    <div class="room-item"><span>👥 ${noCards} ካርዶች ተመርጠዋል</span></div>
+                    <div class="room-item"><span>💰 ${winAmount} ETB</span></div>
+                    <div class="room-item"><span class="${statusClass}">${statusDisplay}</span></div>
+                </div>
+            `;
+            container.appendChild(roomCard);
         }
 
         // ============================================================
