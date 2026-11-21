@@ -947,8 +947,8 @@
         // CONFIG
         // ============================================================
         const CONFIG = {
-            API_URL: 'https://m-bingo-backend-nlfn.onrender.com',
-            WS_URL: 'wss://m-bingo-backend-nlfn.onrender.com',
+            API_URL: 'https://m-bingo-backend-xbjb.onrender.com',
+            WS_URL: 'wss://m-bingo-backend-xbjb.onrender.com',
             FRONTEND_URL: 'https://myf-delivery.github.io/M-Bingo/',
             BOT_USERNAME: 'M_bingo_bot',
             ADMIN_IDS: ['555508978'],
@@ -1958,8 +1958,15 @@
         function renderLobby(data) {
             const container = document.getElementById('lobby-rooms-container');
             container.innerHTML = '';
-            // ⭐ ONLY SHOW THE 10 BIRR ROOM
-            const rooms = [{ stake: 10 }];
+            
+            // ⭐ FIX: Only show the FIRST room found to prevent duplicates
+            const roomData = Array.isArray(data) && data.length > 0 ? data[0] : null;
+            if (!roomData) {
+                container.innerHTML = '<div style="text-align:center;color:#888;padding:20px;">No active rooms</div>';
+                return;
+            }
+
+            const rooms = [{ stake: roomData.stake || 10 }];
             
             rooms.forEach(room => {
                 const serverData = data.find(r => r.stake === room.stake) || {};
