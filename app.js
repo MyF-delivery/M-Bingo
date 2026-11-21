@@ -1520,16 +1520,13 @@ setInterval(async () => {
   try {
     const aiSettings = await getAISettings();
     if (aiSettings.enabled && aiSettings.maxPerRoom > 0) {
+
+      // ⭐ BUG FIX: Check if ANY room exists that is not ENDED
+      // This prevents multiple rooms from being created.
       const existingRooms = await pool.query(
-        `SELECT id FROM rooms 
-         WHERE stake = 10 
-         AND (
-           state IN ('SELECTING', 'PLAYING') 
-           OR (state = 'ENDED' AND ended_at >= NOW() - INTERVAL '15 seconds')
-         ) 
-         LIMIT 1`
+        `SELECT id FROM rooms WHERE state != 'ENDED' LIMIT 1`
       );
-      
+
       if (existingRooms.rows.length === 0) {
         try {
           await pool.query(
