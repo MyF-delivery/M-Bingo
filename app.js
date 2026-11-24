@@ -1516,13 +1516,17 @@ function logAutoLoop(roomId, msg) {
 // every selecting room every second. We now fetch all selecting
 // rooms (with players) in one query and reuse the result.
 // ============================================================
+let isAutoStartRunning = false; // ⭐ NEW LOCK
+
 setInterval(async () => {
+  if (isAutoStartRunning) return; // ⭐ SKIP IF ALREADY RUNNING
+  isAutoStartRunning = true;
+
   try {
     const aiSettings = await getAISettings();
     if (aiSettings.enabled && aiSettings.maxPerRoom > 0) {
 
-      // ⭐ BUG FIX: Check if ANY room exists that is not ENDED
-      // This prevents multiple rooms from being created.
+      // Check if ANY room exists that is not ENDED
       const existingRooms = await pool.query(
         `SELECT id FROM rooms WHERE state != 'ENDED' LIMIT 1`
       );
@@ -1616,7 +1620,11 @@ setInterval(async () => {
         }
       }
     }
-  } catch (e) { console.error('Auto-start loop error:', e.message); }
+  } catch (e) { 
+    console.error('Auto-start loop error:', e.message); 
+  } finally {
+    isAutoStartRunning = false; // ⭐ RELEASE THE LOCK
+  }
 }, 1000);
 
 // ---------- WebSocket Handlers ----------
