@@ -1516,7 +1516,7 @@ function logAutoLoop(roomId, msg) {
 // every selecting room every second. We now fetch all selecting
 // rooms (with players) in one query and reuse the result.
 // ============================================================
-let isAutoStartRunning = false; // ⭐ NEW LOCK
+let isAutoStartRunning = false; // ⭐ THE LOCK
 
 setInterval(async () => {
   if (isAutoStartRunning) return; // ⭐ SKIP IF ALREADY RUNNING
@@ -1524,14 +1524,16 @@ setInterval(async () => {
 
   try {
     const aiSettings = await getAISettings();
+    
     if (aiSettings.enabled && aiSettings.maxPerRoom > 0) {
-
-      // Check if ANY room exists that is not ENDED
-      const existingRooms = await pool.query(
-        `SELECT id FROM rooms WHERE state != 'ENDED' LIMIT 1`
+      // ⭐ FIX: Check for ANY active room (PLAYING or SELECTING)
+      // This prevents the AI from creating a second room.
+      const activeRoomRes = await pool.query(
+        `SELECT id, state FROM rooms WHERE state IN ('SELECTING', 'PLAYING') LIMIT 1`
       );
 
-      if (existingRooms.rows.length === 0) {
+      if (activeRoomRes.rows.length === 0) {
+        // If there are 0 rooms, create exactly 1 new room
         try {
           await pool.query(
             `INSERT INTO rooms (stake, state, status, countdown_seconds, created_at, min_players)
@@ -1539,31 +1541,23 @@ setInterval(async () => {
             [config.BINGO_SELECTION_SECONDS || 60]
           );
           console.log('🤖 Auto-created a new AI room at 10 Birr stake');
-        } catch (e) { console.error('Auto-create AI room error:', e.message); }
-      }
+        } catch (e) { 
+          console.error('Auto-create AI room error:', e.message); 
+        }
+      } else {
+        // If a room exists, we ONLY add AI players to it if it is SELECTING.
+        const activeRoom = activeRoomRes.rows[0];
+        
+        if (activeRoom.state === 'SELECTING') {
+          const snap = await roomSnapshot(activeRoom.id);
+          const currentAICount = (snap.players || []).filter(p => p.is_ai === true).length;
+          const neededAICount = Math.max(0, aiSettings.maxPerRoom - currentAICount);
 
-      const selectingRooms = await pool.query(
-        `SELECT r.id, r.state, r.countdown_seconds, r.created_at, r.min_players, r.stake,
-                r.game_number, r.called_numbers, r.prize_pool,
-                COALESCE(jsonb_agg(jsonb_build_object(
-                  'user_id', rp.user_id, 'cards', rp.cards,
-                  'is_winner', rp.is_winner, 'is_ai', u.is_ai,
-                  'first_name', u.first_name, 'last_name', u.last_name
-                )) FILTER (WHERE rp.user_id IS NOT NULL), '[]'::jsonb) AS players
-         FROM rooms r
-         LEFT JOIN room_players rp ON rp.room_id = r.id AND rp.left_at IS NULL
-         LEFT JOIN users u ON u.id = rp.user_id
-         WHERE r.state = 'SELECTING' AND r.stake = 10
-         GROUP BY r.id`
-      );
-      for (const snap of selectingRooms.rows) {
-        const currentAICount = (snap.players || []).filter(p => p.is_ai === true).length;
-        const neededAICount = Math.max(0, aiSettings.maxPerRoom - currentAICount);
-
-        if (neededAICount > 0) {
-          const added = await addAIPlayersToRoom(snap.id, neededAICount);
-          if (added > 0) {
-            logAutoLoop(snap.id, `pre-filled ${added} AI player(s)`);
+          if (neededAICount > 0) {
+            const added = await addAIPlayersToRoom(activeRoom.id, neededAICount);
+            if (added > 0) {
+              console.log(`🤖 Added ${added} AI player(s) to the active room ${activeRoom.id}`);
+            }
           }
         }
       }
@@ -1623,7 +1617,7 @@ setInterval(async () => {
   } catch (e) { 
     console.error('Auto-start loop error:', e.message); 
   } finally {
-    isAutoStartRunning = false; // ⭐ RELEASE THE LOCK
+    isAutoStartRunning = false; // ⭐ RELEASE THE LOCK (DO NOT DELETE)
   }
 }, 1000);
 
