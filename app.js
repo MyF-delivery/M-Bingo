@@ -1528,23 +1528,45 @@ setInterval(async () => {
     if (aiSettings.enabled && aiSettings.maxPerRoom > 0) {
       // ⭐ FIX: Check for ANY active room (PLAYING or SELECTING)
       // This prevents the AI from creating a second room.
-      const activeRoomRes = await pool.query(
-        `SELECT id, state FROM rooms WHERE state IN ('SELECTING', 'PLAYING') LIMIT 1`
-      );
+            // ⭐ FIX: Use a transaction to lock the table while checking and inserting
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        
+        // Lock the table to prevent concurrent inserts
+        const activeRoomRes = await client.query(
+          `SELECT id, state FROM rooms WHERE state IN ('SELECTING', 'PLAYING') FOR UPDATE LIMIT 1`
+        );
 
-      if (activeRoomRes.rows.length === 0) {
-        // If there are 0 rooms, create exactly 1 new room
-        try {
-          await pool.query(
+        if (activeRoomRes.rows.length === 0) {
+          await client.query(
             `INSERT INTO rooms (stake, state, status, countdown_seconds, created_at, min_players)
              VALUES (10, 'SELECTING', 'SELECTING', $1, CURRENT_TIMESTAMP, 2)`,
             [config.BINGO_SELECTION_SECONDS || 60]
           );
           console.log('🤖 Auto-created a new AI room at 10 Birr stake');
-        } catch (e) { 
-          console.error('Auto-create AI room error:', e.message); 
+        } else {
+          const activeRoom = activeRoomRes.rows[0];
+          if (activeRoom.state === 'SELECTING') {
+            const snap = await roomSnapshot(activeRoom.id);
+            const currentAICount = (snap.players || []).filter(p => p.is_ai === true).length;
+            const neededAICount = Math.max(0, aiSettings.maxPerRoom - currentAICount);
+
+            if (neededAICount > 0) {
+              const added = await addAIPlayersToRoom(activeRoom.id, neededAICount);
+              if (added > 0) {
+                console.log(`🤖 Added ${added} AI player(s) to the active room ${activeRoom.id}`);
+              }
+            }
+          }
         }
-      } else {
+        await client.query('COMMIT');
+      } catch (e) {
+        await client.query('ROLLBACK');
+        console.error('AI Room creation/selection error:', e.message);
+      } finally {
+        client.release();
+      }
         // If a room exists, we ONLY add AI players to it if it is SELECTING.
         const activeRoom = activeRoomRes.rows[0];
         
