@@ -8,10 +8,10 @@ const pool = new Pool({
   database: config.DB_NAME,
   user: config.DB_USER,
   password: config.DB_PASSWORD,
-  max: 20,
+  max: 10, // ⭐ Lowered from 20 to 10 to prevent connection exhaustion
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
-  ssl: { rejectUnauthorized: false }   // REQUIRED for Render PostgreSQL
+  ssl: { rejectUnauthorized: false }
 });
 
 module.exports = pool;
