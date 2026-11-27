@@ -1516,6 +1516,9 @@ function logAutoLoop(roomId, msg) {
 // every selecting room every second. We now fetch all selecting
 // rooms (with players) in one query and reuse the result.
 // ============================================================
+// ============================================================
+// ⭐ AUTO-START LOOP
+// ============================================================
 let isAutoStartRunning = false; // ⭐ THE LOCK
 
 setInterval(async () => {
@@ -1526,9 +1529,8 @@ setInterval(async () => {
     const aiSettings = await getAISettings();
     
     if (aiSettings.enabled && aiSettings.maxPerRoom > 0) {
-      // ⭐ FIX: Check for ANY active room (PLAYING or SELECTING)
-      // This prevents the AI from creating a second room.
-            // ⭐ FIX: Use a transaction to lock the table while checking and inserting
+      
+      // ⭐ FIX: Use a transaction to lock the table while checking and inserting
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
@@ -1566,22 +1568,6 @@ setInterval(async () => {
         console.error('AI Room creation/selection error:', e.message);
       } finally {
         client.release();
-      }
-        // If a room exists, we ONLY add AI players to it if it is SELECTING.
-        const activeRoom = activeRoomRes.rows[0];
-        
-        if (activeRoom.state === 'SELECTING') {
-          const snap = await roomSnapshot(activeRoom.id);
-          const currentAICount = (snap.players || []).filter(p => p.is_ai === true).length;
-          const neededAICount = Math.max(0, aiSettings.maxPerRoom - currentAICount);
-
-          if (neededAICount > 0) {
-            const added = await addAIPlayersToRoom(activeRoom.id, neededAICount);
-            if (added > 0) {
-              console.log(`🤖 Added ${added} AI player(s) to the active room ${activeRoom.id}`);
-            }
-          }
-        }
       }
     }
 
@@ -1639,9 +1625,10 @@ setInterval(async () => {
   } catch (e) { 
     console.error('Auto-start loop error:', e.message); 
   } finally {
-    isAutoStartRunning = false; // ⭐ RELEASE THE LOCK (DO NOT DELETE)
+    isAutoStartRunning = false; // ⭐ RELEASE THE LOCK
   }
 }, 1000);
+
 
 // ---------- WebSocket Handlers ----------
 wss.on('connection', (ws) => {
